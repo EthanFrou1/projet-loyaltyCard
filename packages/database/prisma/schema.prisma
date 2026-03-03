@@ -1,0 +1,336 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Prisma Schema — Loyalty Card Platform
+//
+// Architecture multi-tenant "light" : tout est scopé par business_id.
+// Un monolithe propre suffit pour le MVP et les 10–20 premiers salons.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Type de programme fidélité supporté
+enum ProgramType {
+  STAMPS // Tampons : ex. 10 tampons = récompense
+  POINTS // Points : ex. 1€ = 1 pt, seuils multiples
+}
+
+/// Rôle d'un utilisateur dans un business
+enum UserRole {
+  ADMIN    // Propriétaire / gérant : accès complet
+  EMPLOYEE // Employé : peut scanner / valider tampons, pas de config
+}
+
+/// Plateforme wallet du client
+enum WalletPlatform {
+  APPLE
+  GOOGLE
+}
+
+/// Statut d'un job IA asynchrone
+enum AiJobStatus {
+  PENDING   // En attente dans la queue
+  PROCESSING // En cours d'exécution
+  DONE      // Terminé avec succès
+  FAILED    // Échec (voir error_message)
+}
+
+/// Type de job IA
+enum AiJobType {
+  CLEAN_LOGO          // Nettoyage / fond transparent du logo
+  GENERATE_PASS_DESIGN // 3 variantes de design de carte
+  GENERATE_PROMO_ASSETS // Story IG + affiche A4 + QR
+}
+
+/// Statut d'un programme fidélité
+enum ProgramStatus {
+  ACTIVE   // Programme en cours d'utilisation
+  ARCHIVED // Programme remplacé par une nouvelle version
+}
+
+/// Plan d'abonnement du commerçant
+enum Plan {
+  STARTER  // 19€/mois — 1 programme actif, 20 générations IA/mois
+  PRO      // 39€/mois — 3 programmes actifs, 100 générations IA/mois
+  BUSINESS // 69€/mois — programmes illimités, 300 générations IA/mois
+}
+
+/// Type de transaction
+enum TransactionType {
+  STAMP_ADD    // +1 tampon ajouté par l'employé
+  STAMP_REDEEM // Récompense consommée (remet le compteur à 0)
+  POINTS_ADD   // +N points (achat)
+  POINTS_REDEEM // -N points (récompense consommée)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS
+// Utilisateurs internes (employés du salon, admins).
+// Pas les clients finaux — ceux-ci sont dans la table customers.
+// ─────────────────────────────────────────────────────────────────────────────
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password_hash String
+  role          UserRole @default(EMPLOYEE)
+  business_id   String
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  business Business  @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  ai_jobs  AiJob[]
+
+  @@index([business_id])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUSINESSES
+// Un business = un établissement (ex. salon de coiffure).
+// settings_json stocke des config flexibles (couleurs, heures d'ouverture…).
+// ─────────────────────────────────────────────────────────────────────────────
+model Business {
+  id           String  @id @default(cuid())
+  name         String
+  slug         String  @unique // ex. "salon-marie-paris" — utilisé dans les URLs
+  logo_url     String? // URL R2 du logo nettoyé
+  settings_json Json   @default("{}") // config libre (couleurs, textes wallet…)
+  plan          Plan   @default(STARTER) // plan d'abonnement actif
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  users             User[]
+  programs          Program[]
+  customers         Customer[]
+  transactions      Transaction[]
+  ai_jobs           AiJob[]
+  ai_assets         AiAsset[]
+  usage_counters    UsageCounter[]
+  wallet_passes     WalletPass[]
+
+  @@map("businesses")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROGRAMS
+// Un programme fidélité actif par business (MVP).
+// config_json stocke les règles : seuil de tampons, valeur récompense, etc.
+//
+// Exemple STAMPS : { "threshold": 10, "reward_label": "10€ de réduction" }
+// Exemple POINTS : { "rate": 1, "tiers": [{ "points": 100, "reward": "café offert" }] }
+// ─────────────────────────────────────────────────────────────────────────────
+model Program {
+  id          String      @id @default(cuid())
+  business_id String
+  name        String      // ex. "Programme fidélité printemps 2025"
+  type        ProgramType
+  config_json Json          // règles du programme (flexible)
+  status      ProgramStatus @default(ACTIVE) // ACTIVE = en cours, ARCHIVED = remplacé
+  version     Int           @default(1)      // 1, 2, 3… incrémenté à chaque modification
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  business     Business      @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  customers    Customer[]    // clients inscrits dans ce programme
+
+  @@index([business_id])
+  @@map("programs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMERS
+// Clients finaux du salon. Identifiés par nom + téléphone.
+// qr_secret : secret aléatoire utilisé pour signer le QR code (HMAC ou JWT).
+//   → évite qu'un client forge un QR d'un autre client.
+// ─────────────────────────────────────────────────────────────────────────────
+model Customer {
+  id          String  @id @default(cuid())
+  business_id String
+  name        String
+  phone       String?
+  email       String?
+  qr_secret   String  @unique // secret pour signer le QR — généré à la création
+
+  // Programme fidélité dans lequel le client est inscrit (au moment de son inscription)
+  program_id  String?  // null pour les clients créés manuellement avant le versioning
+
+  // Compteurs dénormalisés pour affichage rapide (recalculable depuis transactions)
+  stamp_count Int @default(0) // tampons actuels
+  point_count Int @default(0) // points actuels
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  business       Business       @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  program        Program?       @relation(fields: [program_id], references: [id])
+  transactions   Transaction[]
+  wallet_passes  WalletPass[]
+  apple_devices  AppleDevice[]
+
+  @@index([business_id])
+  @@index([phone, business_id])
+  @@map("customers")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRANSACTIONS
+// Historique complet de toutes les opérations fidélité.
+// delta : positif = ajout, négatif = consommation
+//   ex. +1 tampon, -10 tampons (redeem), +50 points, -100 points
+// ─────────────────────────────────────────────────────────────────────────────
+model Transaction {
+  id          String          @id @default(cuid())
+  business_id String
+  customer_id String
+  program_id  String
+  type        TransactionType
+  delta       Int             // ex. +1, -10, +50, -100
+  note        String?         // note libre (ex. "Coupe + couleur")
+
+  created_at DateTime @default(now())
+
+  // Relations
+  business Business  @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  customer Customer  @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  program  Program   @relation(fields: [program_id], references: [id], onDelete: Cascade)
+
+  @@index([business_id, created_at(sort: Desc)])
+  @@index([customer_id])
+  @@map("transactions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WALLET PASSES
+// Un pass par client par plateforme.
+// serial : identifiant unique du pass côté Apple/Google.
+// last_version : timestamp ou counter — incrémenté à chaque mise à jour
+//   pour que les devices détectent un nouveau pass à télécharger.
+// ─────────────────────────────────────────────────────────────────────────────
+model WalletPass {
+  id           String         @id @default(cuid())
+  business_id  String
+  customer_id  String
+  platform     WalletPlatform
+  serial       String         @unique // identifiant unique du pass
+  last_version Int            @default(1) // incrémenté à chaque update
+  pass_data    Json?          // snapshot des données du pass (pour regénération)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  business Business      @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  customer Customer      @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  @@unique([customer_id, platform])
+  @@index([business_id])
+  @@map("wallet_passes")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPLE DEVICES
+// Devices enregistrés pour les push notifications Apple PassKit.
+// Quand un client ajoute un pass Apple Wallet, son iPhone appelle le
+// web service pour s'enregistrer → on stocke le push_token ici.
+// ─────────────────────────────────────────────────────────────────────────────
+model AppleDevice {
+  id                String @id @default(cuid())
+  customer_id       String
+  device_library_id String // identifiant unique du device (fourni par Apple)
+  push_token        String // token APNs pour envoyer les notifs de mise à jour
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  @@unique([customer_id, device_library_id])
+  @@index([customer_id])
+  @@map("apple_devices")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI JOBS
+// Jobs IA asynchrones (traités via queue BullMQ).
+// cost_estimate : coût estimé en USD (pour le suivi des dépenses IA).
+// ─────────────────────────────────────────────────────────────────────────────
+model AiJob {
+  id             String      @id @default(cuid())
+  business_id    String
+  user_id        String
+  type           AiJobType
+  status         AiJobStatus @default(PENDING)
+  prompt         String?     // prompt utilisé pour la génération
+  cost_estimate  Float?      // ex. 0.011 USD par image low quality
+  error_message  String?     // message d'erreur si status = FAILED
+
+  created_at  DateTime  @default(now())
+  completed_at DateTime?
+
+  // Relations
+  business  Business   @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  ai_assets AiAsset[]
+
+  @@index([business_id, status])
+  @@map("ai_jobs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI ASSETS
+// Résultats d'un job IA : images générées stockées sur R2.
+// kind : ex. "logo_cleaned", "pass_design_1", "promo_story_ig"
+// ─────────────────────────────────────────────────────────────────────────────
+model AiAsset {
+  id          String @id @default(cuid())
+  business_id String
+  job_id      String
+  kind        String // ex. "logo_cleaned", "pass_design_1", "promo_a4"
+  storage_url String // URL R2 publique
+
+  created_at DateTime @default(now())
+
+  // Relations
+  business Business @relation(fields: [business_id], references: [id], onDelete: Cascade)
+  job      AiJob    @relation(fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@index([business_id])
+  @@map("ai_assets")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USAGE COUNTERS
+// Quota IA mensuel par business.
+// month : format "YYYY-MM" (ex. "2025-07")
+// Réinitialisé chaque mois (ou simplement une nouvelle ligne créée).
+// ─────────────────────────────────────────────────────────────────────────────
+model UsageCounter {
+  id                    String @id @default(cuid())
+  business_id           String
+  month                 String // format "YYYY-MM"
+  ai_generations_count  Int    @default(0) // générations IA consommées ce mois
+
+  // Relations
+  business Business @relation(fields: [business_id], references: [id], onDelete: Cascade)
+
+  @@unique([business_id, month])
+  @@map("usage_counters")
+}

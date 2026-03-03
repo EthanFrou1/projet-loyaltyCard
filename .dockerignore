@@ -1,0 +1,41 @@
+# Dépendances (reconstruites dans le container)
+**/node_modules
+
+# Build outputs
+**/dist
+**/.next
+
+# Variables d'environnement locales (JAMAIS dans l'image)
+.env
+.env.local
+.env.*.local
+
+# Cache Turbo
+.turbo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+
+# IDE
+.vscode
+.idea
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Certificats Apple (sensibles — montés en secret en prod)
+*.p12
+*.pem
+*.cer
+*.key
+
+# Prisma migrations (appliquées via CMD dans le Dockerfile)
+**/migrations

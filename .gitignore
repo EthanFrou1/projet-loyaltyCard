@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment variables (JAMAIS commiter les secrets)
+.env
+.env.local
+.env.*.local
+
+# Turbo cache
+.turbo/
+
+# Prisma generated
+prisma/migrations/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Wallet / certificats Apple (contiennent des clés privées)
+*.p12
+*.pem
+*.cer
+*.key
+
+# Assets générés par l'IA (stockés sur R2, pas dans le repo)
+apps/api/uploads/

@@ -1,0 +1,153 @@
+name: loyalty-card
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Compose — environnement de développement complet
+#
+# Services :
+#   postgres  → base de données principale
+#   redis     → queue BullMQ + cache
+#   api       → backend Fastify (port 3001)
+#   web       → frontend Next.js (port 3000)
+#   worker    → worker BullMQ pour les jobs IA (même image que api)
+#
+# Usage :
+#   docker compose up -d          → démarrer tous les services
+#   docker compose up api web     → démarrer seulement l'API + le front
+#   docker compose logs -f api    → suivre les logs de l'API
+#   docker compose down -v        → supprimer les containers ET les volumes
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: loyalty_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: loyalty
+      POSTGRES_PASSWORD: loyalty_secret
+      POSTGRES_DB: loyalty_db
+    ports:
+      - "5432:5432"        # exposé pour accès depuis Prisma Studio local
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loyalty -d loyalty_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: loyalty_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── API Fastify ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: loyalty_api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      API_PORT: 3001
+      API_HOST: "0.0.0.0"
+      DATABASE_URL: postgresql://loyalty:loyalty_secret@postgres:5432/loyalty_db
+      REDIS_URL: redis://redis:6379
+      # Auth
+      JWT_SECRET: dev_jwt_secret_change_in_production_32chars
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_SECRET: dev_refresh_secret_change_in_production_32c
+      JWT_REFRESH_EXPIRES_IN: 30d
+      # IA (à remplir avec ta vraie clé)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Storage R2 (à remplir)
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-loyalty-assets}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-http://localhost:9000}
+      # Google Wallet (à remplir)
+      GOOGLE_WALLET_ISSUER_ID: ${GOOGLE_WALLET_ISSUER_ID:-}
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
+      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}
+      # Apple Wallet (à remplir)
+      APPLE_PASS_TYPE_IDENTIFIER: ${APPLE_PASS_TYPE_IDENTIFIER:-}
+      APPLE_TEAM_IDENTIFIER: ${APPLE_TEAM_IDENTIFIER:-}
+      APPLE_PASSKIT_WEB_SERVICE_URL: ${APPLE_PASSKIT_WEB_SERVICE_URL:-http://localhost:3001/wallet/apple}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Hot-reload des sources en dev (surcharge le code compilé)
+      - ./apps/api/src:/app/apps/api/src:ro
+      - ./packages:/app/packages:ro
+
+  # ── Worker BullMQ ───────────────────────────────────────────────────────────
+  # Même image que l'API, mais pointe sur le fichier worker
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: loyalty_worker
+    restart: unless-stopped
+    command: ["node", "dist/workers/ai.worker.js"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://loyalty:loyalty_secret@postgres:5432/loyalty_db
+      REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-loyalty-assets}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-http://localhost:9000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api/src:/app/apps/api/src:ro
+      - ./packages:/app/packages:ro
+
+  # ── Frontend Next.js ────────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001
+    container_name: loyalty_web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    depends_on:
+      - api
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Volumes persistants
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
