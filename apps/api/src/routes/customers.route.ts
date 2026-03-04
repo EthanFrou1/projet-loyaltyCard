@@ -42,8 +42,15 @@ export async function customerRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "ValidationError", message: body.error.message });
     }
 
-    const customer = await customerService.create(request.user.business_id, body.data);
-    return reply.status(201).send(customer);
+    try {
+      const customer = await customerService.create(request.user.business_id, body.data);
+      return reply.status(201).send(customer);
+    } catch (err) {
+      if (err instanceof Error && (err as NodeJS.ErrnoException & { code?: string }).code === "EMAIL_TAKEN") {
+        return reply.status(409).send({ error: "Conflict", message: err.message });
+      }
+      throw err;
+    }
   });
 
   // GET /customers?search=Marie&page=1&per_page=20

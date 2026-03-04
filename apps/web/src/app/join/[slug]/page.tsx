@@ -1,23 +1,22 @@
 "use client";
 
 /**
- * Page d'inscription client — accessible publiquement depuis le QR code du commerce.
- *
- * Flux :
- *   1. Le commerçant affiche un QR code pointant vers /join/[slug]
- *   2. Le client scanne → arrive sur cette page
- *   3. Il remplit prénom, nom, email (+ téléphone optionnel)
- *   4. Sa carte est créée → redirigé vers /welcome/[id]
- *
- * Pas d'authentification requise.
+ * Public join page scanned from business QR.
+ * Supports selecting a loyalty program when multiple are active.
  */
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+interface JoinProgram {
+  id: string;
+  name: string;
+  type: "STAMPS" | "POINTS";
+  threshold: number;
+  reward_label: string;
+}
 
 interface BusinessInfo {
   name: string;
@@ -25,33 +24,48 @@ interface BusinessInfo {
   slug: string;
   threshold: number;
   reward_label: string;
+  default_program_id: string | null;
+  programs: JoinProgram[];
 }
-
-// ─── Composant principal ──────────────────────────────────────────────────────
 
 export default function JoinPage() {
   const { slug } = useParams<{ slug: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const presetProgramId = searchParams.get("programId") ?? searchParams.get("program_id");
 
   const [business, setBusiness] = useState<BusinessInfo | null>(null);
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
-  // Formulaire
   const [firstName, setFirstName] = useState("");
-  const [lastName,  setLastName]  = useState("");
-  const [email,     setEmail]     = useState("");
-  const [phone,     setPhone]     = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Charger les infos du commerce
   useEffect(() => {
     fetch(`${API_URL}/api/v1/join/${slug}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
-      .then((data: BusinessInfo) => setBusiness(data))
+      .then((data: BusinessInfo) => {
+        setBusiness(data);
+        const ids = new Set((data.programs ?? []).map((p) => p.id));
+        if (presetProgramId && ids.has(presetProgramId)) {
+          setSelectedProgramId(presetProgramId);
+          return;
+        }
+        setSelectedProgramId(data.default_program_id ?? data.programs?.[0]?.id ?? null);
+      })
       .catch(() => setNotFound(true));
-  }, [slug]);
+  }, [slug, presetProgramId]);
+
+  const selectedProgram = useMemo(() => {
+    if (!business || !selectedProgramId) return null;
+    return business.programs.find((p) => p.id === selectedProgramId) ?? null;
+  }, [business, selectedProgramId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,9 +78,10 @@ export default function JoinPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           first_name: firstName.trim(),
-          last_name:  lastName.trim(),
-          email:      email.trim(),
+          last_name: lastName.trim(),
+          email: email.trim(),
           ...(phone.trim() && { phone: phone.trim() }),
+          ...(selectedProgramId && { program_id: selectedProgramId }),
         }),
       });
 
@@ -77,25 +92,22 @@ export default function JoinPage() {
         return;
       }
 
-      // Rediriger vers la page de bienvenue avec les infos du business
       router.push(`/welcome/${data.id}?slug=${slug}&new=${!data.already_registered}`);
     } catch {
-      setError("Impossible de contacter le serveur. Réessayez.");
+      setError("Impossible de contacter le serveur. Reessayez.");
     } finally {
       setLoading(false);
     }
   }
 
-  // ─── États de chargement / erreur ─────────────────────────────────────────
-
   if (notFound) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="text-center">
-          <p className="text-4xl mb-4">🔍</p>
-          <h1 className="text-xl font-bold text-gray-900">Établissement introuvable</h1>
+          <p className="text-4xl mb-4">Search</p>
+          <h1 className="text-xl font-bold text-gray-900">Etablissement introuvable</h1>
           <p className="text-sm text-gray-500 mt-2">
-            Ce lien n'est pas valide. Demandez le QR code à votre commerçant.
+            Ce lien n'est pas valide. Demandez le QR code a votre commercant.
           </p>
         </div>
       </div>
@@ -110,13 +122,9 @@ export default function JoinPage() {
     );
   }
 
-  // ─── Formulaire d'inscription ──────────────────────────────────────────────
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
-
-        {/* En-tête commerce */}
         <div className="text-center space-y-3">
           {business.logo_url ? (
             <img
@@ -126,30 +134,44 @@ export default function JoinPage() {
             />
           ) : (
             <div className="w-20 h-20 rounded-2xl bg-blue-100 flex items-center justify-center mx-auto text-3xl">
-              🏪
+              Shop
             </div>
           )}
           <div>
             <h1 className="text-xl font-bold text-gray-900">{business.name}</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Créez votre carte fidélité gratuite
-            </p>
+            <p className="text-sm text-gray-500 mt-1">Creez votre carte fidelite gratuite</p>
           </div>
 
-          {/* Aperçu de la récompense */}
           <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-800">
-            <span className="font-semibold">{business.threshold} tampons</span> =&nbsp;
-            <span>{business.reward_label}</span> 🎁
+            <span className="font-semibold">{selectedProgram?.threshold ?? business.threshold} tampons</span>
+            <span> = </span>
+            <span>{selectedProgram?.reward_label ?? business.reward_label}</span>
           </div>
         </div>
 
-        {/* Formulaire */}
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
+            {(business.programs?.length ?? 0) > 1 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Programme de fidelite *</label>
+                <select
+                  value={selectedProgramId ?? ""}
+                  onChange={(e) => setSelectedProgramId(e.target.value || null)}
+                  className={inputClass}
+                  required
+                >
+                  {business.programs.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} - {p.threshold} tampons = {p.reward_label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Prénom *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Prenom *</label>
                 <input
                   type="text"
                   required
@@ -186,13 +208,13 @@ export default function JoinPage() {
                 autoComplete="email"
               />
               <p className="text-xs text-gray-400 mt-1">
-                Pour retrouver votre carte si vous changez de téléphone.
+                Pour retrouver votre carte si vous changez de telephone.
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Téléphone <span className="text-gray-400 font-normal">(optionnel)</span>
+                Telephone <span className="text-gray-400 font-normal">(optionnel)</span>
               </label>
               <input
                 type="tel"
@@ -215,12 +237,12 @@ export default function JoinPage() {
               disabled={loading}
               className="w-full py-3 px-4 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm"
             >
-              {loading ? "Création de votre carte…" : "Obtenir ma carte fidélité →"}
+              {loading ? "Creation de votre carte..." : "Obtenir ma carte fidelite ->"}
             </button>
           </form>
 
           <p className="text-xs text-center text-gray-400">
-            Vos données sont utilisées uniquement par {business.name}.
+            Vos donnees sont utilisees uniquement par {business.name}.
             <br />Aucun spam, aucune revente.
           </p>
         </div>

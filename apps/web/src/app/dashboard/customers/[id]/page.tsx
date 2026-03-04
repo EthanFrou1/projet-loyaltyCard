@@ -8,31 +8,35 @@
  *   - Bouton "+1 Tampon" (geste principal au comptoir)
  *   - Bouton "Consommer récompense" (si disponible)
  *   - QR code du client
+ *   - Informations du client (programme assigné inclus)
+ *   - Carte digitale : statut Apple Wallet / Google Wallet
  *   - Historique des transactions
- *   - Liens "Ajouter au wallet" (Apple / Google)
- *
- * Le program_id actif est chargé depuis GET /business au montage.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { QRCodeSVG } from "qrcode.react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Smartphone, CheckCircle2, Circle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import type { CustomerDetailResponse } from "@loyalty/types";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+interface AppleWalletHealth {
+  ready: boolean;
+  issues: string[];
+}
+
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
 
-  // Charger le client
   const { data: customer, mutate } = useSWR<CustomerDetailResponse>(
     `/customers/${id}`,
     (url: string) => apiClient.get(url)
   );
 
-  // Charger le program_id actif depuis le business
   const { data: business } = useSWR<{ programs: Array<{ id: string; config_json: { threshold?: number } }> }>(
     "/business",
     (url: string) => apiClient.get(url)
@@ -43,6 +47,14 @@ export default function CustomerDetailPage() {
 
   const [loading, setLoading] = useState<"stamp" | "redeem" | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [appleHealth, setAppleHealth] = useState<AppleWalletHealth | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/v1/wallet/apple/health`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setAppleHealth(data as AppleWalletHealth); })
+      .catch(() => {});
+  }, []);
 
   if (!customer) {
     return (
@@ -54,6 +66,10 @@ export default function CustomerDetailPage() {
   }
 
   const rewardAvailable = customer.stamp_count >= stampThreshold;
+
+  // Statut wallet
+  const hasApple  = customer.wallet_passes.some((p) => p.platform === "APPLE");
+  const hasGoogle = customer.wallet_passes.some((p) => p.platform === "GOOGLE");
 
   async function handleStamp() {
     if (!programId) { setMessage({ text: "Programme introuvable", ok: false }); return; }
@@ -100,7 +116,7 @@ export default function CustomerDetailPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-        {/* ── Bloc tampons (prend 2 colonnes sur xl) ── */}
+        {/* ── Bloc tampons (2 colonnes sur xl) ── */}
         <div className="xl:col-span-2 bg-white rounded-xl p-6 shadow-sm space-y-5">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">Tampons</h2>
@@ -109,12 +125,12 @@ export default function CustomerDetailPage() {
             </span>
           </div>
 
-          {/* Visualisation tampons */}
-          <div className="grid grid-cols-5 gap-3">
+          {/* Visualisation tampons — cercles plus petits */}
+          <div className="flex flex-wrap gap-2">
             {Array.from({ length: stampThreshold }).map((_, i) => (
               <div
                 key={i}
-                className={`aspect-square rounded-full border-2 flex items-center justify-center text-sm font-medium transition-colors ${
+                className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-xs font-medium transition-colors shrink-0 ${
                   i < customer.stamp_count
                     ? "bg-blue-600 border-blue-600 text-white"
                     : "border-gray-200 text-gray-300"
@@ -164,12 +180,14 @@ export default function CustomerDetailPage() {
         </div>
 
         {/* ── QR Code ── */}
-        <div className="bg-white rounded-xl p-6 shadow-sm space-y-4 flex flex-col items-center justify-center">
-          <h2 className="text-lg font-semibold text-gray-800 self-start">QR Code</h2>
-          <QRCodeSVG value={customer.qr_url} size={160} />
-          <p className="text-xs text-center text-gray-400">
-            Le client scanne ce code pour valider son passage
-          </p>
+        <div className="bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4">
+          <h2 className="text-lg font-semibold text-gray-800">QR Code</h2>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3">
+            <QRCodeSVG value={customer.qr_url} size={160} />
+            <p className="text-xs text-center text-gray-400">
+              Le client scanne ce code pour valider son passage
+            </p>
+          </div>
         </div>
       </div>
 
@@ -181,26 +199,84 @@ export default function CustomerDetailPage() {
           <InfoItem label="Email" value={customer.email ?? "—"} />
           <InfoItem label="Client depuis" value={new Date(customer.created_at).toLocaleDateString("fr-FR")} />
           <InfoItem label="Points" value={String(customer.point_count)} />
+          <div>
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Programme</p>
+            {customer.program_name ? (
+              <Link
+                href="/dashboard/programs"
+                className="inline-flex items-center gap-1 font-medium text-blue-700 hover:text-blue-900 text-sm"
+              >
+                {customer.program_name}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            ) : (
+              <p className="font-medium text-gray-400 text-sm">Non assigné</p>
+            )}
+          </div>
         </div>
       </div>
 
       {/* ── Carte digitale ── */}
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Carte digitale</h2>
-        <div className="flex gap-3">
-          <WalletButton
-            label="Apple Wallet"
-            onClick={() => { window.location.href = `/api/v1/wallet/apple/${id}/download`; }}
-            bg="bg-black"
-          />
-          <WalletButton
-            label="Google Wallet"
-            onClick={async () => {
-              const data = await apiClient.post<{ save_url: string }>(`/wallet/google/${id}/jwt`, {});
-              window.open(data.save_url, "_blank");
-            }}
-            bg="bg-blue-600"
-          />
+        <p className="text-xs text-gray-400 mb-4">
+          Le client peut ajouter sa carte de fidélité directement dans son application Wallet.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+          {/* Apple Wallet */}
+          <div className="flex items-center justify-between border border-gray-200 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Smartphone className="h-5 w-5 text-gray-600" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Apple Wallet</p>
+                <p className={`text-xs flex items-center gap-1 mt-0.5 ${hasApple ? "text-green-600" : "text-gray-400"}`}>
+                  {hasApple
+                    ? <><CheckCircle2 className="h-3 w-3" /> Activé</>
+                    : <><Circle className="h-3 w-3" /> Non activé</>
+                  }
+                </p>
+              </div>
+            </div>
+                        <button
+              onClick={() => {
+                if (!appleHealth?.ready) return;
+                window.location.href = `${API_URL}/api/v1/wallet/apple/${id}/download`;
+              }}
+              disabled={appleHealth?.ready === false}
+              className="text-xs px-3 py-1.5 bg-black text-white rounded-lg hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed transition-opacity shrink-0"
+            >
+              {appleHealth?.ready === false
+                ? "Indisponible"
+                : hasApple ? "Mettre à jour" : "Ajouter"}
+            </button>
+          </div>
+
+          {/* Google Wallet */}
+          <div className="flex items-center justify-between border border-gray-200 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Smartphone className="h-5 w-5 text-gray-600" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Google Wallet</p>
+                <p className={`text-xs flex items-center gap-1 mt-0.5 ${hasGoogle ? "text-green-600" : "text-gray-400"}`}>
+                  {hasGoogle
+                    ? <><CheckCircle2 className="h-3 w-3" /> Activé</>
+                    : <><Circle className="h-3 w-3" /> Non activé</>
+                  }
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                const data = await apiClient.post<{ save_url: string }>(`/wallet/google/${id}/jwt`, {});
+                window.open(data.save_url, "_blank");
+              }}
+              className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shrink-0"
+            >
+              {hasGoogle ? "Mettre à jour" : "Ajouter"}
+            </button>
+          </div>
+
         </div>
       </div>
 
@@ -234,22 +310,11 @@ export default function CustomerDetailPage() {
 
 // ─── Composants utilitaires ───────────────────────────────────────────────────
 
-function InfoItem({ label, value }: { label: string; value: string }) {
+function InfoItem({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div>
       <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
-      <p className="font-medium text-gray-900">{value}</p>
+      <p className={`font-medium ${highlight ? "text-blue-700" : "text-gray-900"}`}>{value}</p>
     </div>
-  );
-}
-
-function WalletButton({ label, onClick, bg }: { label: string; onClick: () => void; bg: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`${bg} text-white text-sm font-medium px-4 py-2 rounded-lg hover:opacity-90 transition-opacity`}
-    >
-      {label}
-    </button>
   );
 }

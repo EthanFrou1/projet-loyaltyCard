@@ -21,7 +21,7 @@ export default function CustomersPage() {
 
   const { data, isLoading, mutate } = useSWR<PaginatedResponse<CustomerResponse>>(
     `/customers?search=${search}&page=${page}&per_page=20`,
-    (url: string) => apiClient.get(url)
+    (url: string) => apiClient.get<PaginatedResponse<CustomerResponse>>(url)
   );
 
   return (
@@ -56,6 +56,7 @@ export default function CustomersPage() {
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Programme</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tampons</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Membre depuis</th>
               <th className="px-6 py-3" />
@@ -79,6 +80,12 @@ export default function CustomersPage() {
                 <tr key={customer.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{customer.name}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">{customer.phone ?? "—"}</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {customer.program_name
+                      ? <span className="text-blue-700 font-medium">{customer.program_name}</span>
+                      : <span className="text-gray-300">—</span>
+                    }
+                  </td>
                   <td className="px-6 py-4">
                     <StampBadge count={customer.stamp_count} />
                   </td>

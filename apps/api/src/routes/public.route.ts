@@ -1,10 +1,8 @@
 /**
- * Routes publiques — sans authentification requise.
+ * Public routes - no authentication required.
  *
- * Ces routes sont utilisées par les clients finaux depuis leur téléphone.
- *
- * GET  /join/:slug           → informations du business (nom, logo) pour la page d'inscription
- * POST /join/:slug           → inscrire un nouveau client et créer sa carte fidélité
+ * GET  /join/:slug           -> business info + active programs
+ * POST /join/:slug?program_id=... -> register customer in selected program
  */
 
 import type { FastifyInstance } from "fastify";
@@ -12,24 +10,37 @@ import { z } from "zod";
 import crypto from "node:crypto";
 import { prisma } from "@loyalty/database";
 
-// ─── Schémas Zod ──────────────────────────────────────────────────────────────
-
 const SlugParams = z.object({
   slug: z.string().min(1),
 });
 
-const RegisterBody = z.object({
-  first_name: z.string().min(1).max(50),
-  last_name:  z.string().min(1).max(50),
-  email:      z.string().email(),
-  phone:      z.string().regex(/^\+?[\d\s\-()]{6,20}$/).optional(),
+const JoinQuery = z.object({
+  program_id: z.string().cuid().optional(),
 });
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+const RegisterBody = z.object({
+  first_name: z.string().min(1).max(50),
+  last_name: z.string().min(1).max(50),
+  email: z.string().email(),
+  phone: z.string().regex(/^\+?[\d\s\-()]{6,20}$/).optional(),
+  program_id: z.string().cuid().optional(),
+});
+
+type ProgramConfig = {
+  threshold?: number;
+  reward_label?: string;
+};
+
+function extractProgramPreview(cfg: unknown): { threshold: number; reward_label: string } {
+  const c = (cfg ?? {}) as ProgramConfig;
+  return {
+    threshold: c.threshold ?? 10,
+    reward_label: c.reward_label ?? "Recompense",
+  };
+}
 
 export async function publicRoutes(app: FastifyInstance) {
-
-  // GET /join/:slug — infos du business pour afficher la page d'inscription
+  // GET /join/:slug - info for public sign-up page
   app.get("/:slug", async (request, reply) => {
     const params = SlugParams.safeParse(request.params);
     if (!params.success) {
@@ -41,89 +52,112 @@ export async function publicRoutes(app: FastifyInstance) {
       include: {
         programs: {
           where: { status: "ACTIVE" },
-          orderBy: { version: "desc" },
-          take: 1,
-          select: { id: true, config_json: true },
+          orderBy: [{ version: "desc" }, { created_at: "desc" }],
+          select: { id: true, name: true, type: true, config_json: true },
         },
       },
     });
 
     if (!business) {
-      return reply.status(404).send({ error: "NotFound", message: "Établissement non trouvé" });
+      return reply.status(404).send({ error: "NotFound", message: "Etablissement non trouve" });
     }
 
-    const program = business.programs[0];
-    const config = program?.config_json as { threshold?: number; reward_label?: string } | null;
+    const programs = business.programs.map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      ...extractProgramPreview(p.config_json),
+    }));
+
+    const defaultProgram = programs[0] ?? null;
 
     return reply.send({
-      name:         business.name,
-      logo_url:     business.logo_url,
-      slug:         business.slug,
-      threshold:    config?.threshold    ?? 10,
-      reward_label: config?.reward_label ?? "Récompense",
+      name: business.name,
+      logo_url: business.logo_url,
+      slug: business.slug,
+      threshold: defaultProgram?.threshold ?? 10,
+      reward_label: defaultProgram?.reward_label ?? "Recompense",
+      default_program_id: defaultProgram?.id ?? null,
+      programs,
     });
   });
 
-  // POST /join/:slug — inscrire un client (crée ou retrouve depuis l'email)
+  // POST /join/:slug - register customer (or return existing one)
   app.post("/:slug", async (request, reply) => {
     const params = SlugParams.safeParse(request.params);
-    const body   = RegisterBody.safeParse(request.body);
+    const query = JoinQuery.safeParse(request.query);
+    const body = RegisterBody.safeParse(request.body);
 
-    if (!params.success || !body.success) {
-      return reply.status(400).send({ error: "ValidationError", message: "Données invalides" });
+    if (!params.success || !query.success || !body.success) {
+      return reply.status(400).send({ error: "ValidationError", message: "Donnees invalides" });
     }
 
-    // Trouver le business par slug
     const business = await prisma.business.findFirst({
       where: { slug: params.data.slug },
+      select: { id: true },
     });
 
     if (!business) {
-      return reply.status(404).send({ error: "NotFound", message: "Établissement non trouvé" });
+      return reply.status(404).send({ error: "NotFound", message: "Etablissement non trouve" });
+    }
+
+    const activePrograms = await prisma.program.findMany({
+      where: { business_id: business.id, status: "ACTIVE" },
+      orderBy: [{ version: "desc" }, { created_at: "desc" }],
+      select: { id: true },
+    });
+
+    const activeProgramIds = new Set(activePrograms.map((p) => p.id));
+
+    const chosenProgramId =
+      body.data.program_id
+      ?? query.data.program_id
+      ?? activePrograms[0]?.id
+      ?? null;
+
+    if (chosenProgramId && !activeProgramIds.has(chosenProgramId)) {
+      return reply.status(400).send({
+        error: "ValidationError",
+        message: "Programme invalide pour cet etablissement.",
+      });
     }
 
     const fullName = `${body.data.first_name} ${body.data.last_name}`.trim();
 
-    // Si l'email existe déjà pour ce business → retourner le client existant
     const existingCustomer = await prisma.customer.findFirst({
       where: { business_id: business.id, email: body.data.email },
     });
 
     if (existingCustomer) {
       return reply.send({
-        id:          existingCustomer.id,
-        name:        existingCustomer.name,
-        email:       existingCustomer.email,
+        id: existingCustomer.id,
+        name: existingCustomer.name,
+        email: existingCustomer.email,
         stamp_count: existingCustomer.stamp_count,
+        program_id: existingCustomer.program_id,
         already_registered: true,
       });
     }
 
-    // Récupérer le programme actif pour l'inscrire dedans
-    const activeProgram = await prisma.program.findFirst({
-      where: { business_id: business.id, status: "ACTIVE" },
-      orderBy: { version: "desc" },
-    });
-
-    // Créer le nouveau client en l'associant au programme actif
     const qrSecret = crypto.randomBytes(32).toString("hex");
 
     const customer = await prisma.customer.create({
       data: {
         business_id: business.id,
-        name:        fullName,
-        email:       body.data.email,
-        phone:       body.data.phone,
-        qr_secret:   qrSecret,
-        program_id:  activeProgram?.id ?? null,
+        name: fullName,
+        email: body.data.email,
+        phone: body.data.phone,
+        qr_secret: qrSecret,
+        program_id: chosenProgramId,
       },
     });
 
     return reply.status(201).send({
-      id:          customer.id,
-      name:        customer.name,
-      email:       customer.email,
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
       stamp_count: customer.stamp_count,
+      program_id: customer.program_id,
       already_registered: false,
     });
   });

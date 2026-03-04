@@ -91,6 +91,8 @@ export interface CustomerResponse {
   point_count: number;
   qr_url: string; // URL affichant le QR code du client
   created_at: string;
+  program_id: string | null;    // programme auquel le client est inscrit
+  program_name: string | null;  // nom du programme (null si aucun / ancien client)
 }
 
 export interface CustomerDetailResponse extends CustomerResponse {

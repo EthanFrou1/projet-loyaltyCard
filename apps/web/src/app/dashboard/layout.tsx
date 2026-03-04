@@ -11,13 +11,14 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Users, LayoutDashboard, Sparkles, Settings, LogOut, Store, CreditCard } from "lucide-react";
+import { Users, LayoutDashboard, Sparkles, Settings, LogOut, Store, CreditCard, Stamp } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 const navItems = [
   { href: "/dashboard",           label: "Tableau de bord",    icon: LayoutDashboard, exact: true  },
   { href: "/dashboard/customers", label: "Clients",            icon: Users,           exact: false },
+  { href: "/dashboard/programs",  label: "Programmes",         icon: Stamp,           exact: false },
   { href: "/dashboard/ai",        label: "Outils IA",          icon: Sparkles,        exact: false },
   { href: "/dashboard/business",  label: "Mon établissement",  icon: Store,           exact: false },
   { href: "/dashboard/billing",   label: "Abonnement",         icon: CreditCard,      exact: false },

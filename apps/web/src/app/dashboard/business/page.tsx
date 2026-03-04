@@ -15,9 +15,11 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircle, Circle, Store, Star, Palette, MapPin, Phone, QrCode, Copy, Check, Upload, Trash2, AlertTriangle, ChevronDown, ChevronUp, Plus, Lock, Pencil } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle, Circle, Store, Star, Palette, MapPin, Phone, QrCode, Copy, Check, Upload, Trash2, Search, ArrowRight, Stamp } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { apiClient } from "@/lib/api-client";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -66,6 +68,7 @@ const ESTABLISHMENT_TYPES = [
 
 export default function BusinessPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [business, setBusiness] = useState<Business | null>(null);
   const [loadError, setLoadError] = useState(false);
 
@@ -77,24 +80,9 @@ export default function BusinessPage() {
   const [saving1, setSaving1] = useState(false);
   const [saved1, setSaved1]   = useState(false);
   const [error1, setError1]   = useState<string | null>(null);
+  // Snapshot des valeurs sauvegardées pour détecter les changements
+  const [savedSnap, setSavedSnap] = useState({ name: "", type: "salon_coiffure", address: "", phone: "" });
 
-  // ── Édition d'un programme (section 2) ──
-  const [editingProgram, setEditingProgram]   = useState<Program | null>(null);
-  const [editName, setEditName]               = useState("");
-  const [editThreshold, setEditThreshold]     = useState("10");
-  const [editReward, setEditReward]           = useState("");
-  const [editSaving, setEditSaving]           = useState(false);
-  const [editError, setEditError]             = useState<string | null>(null);
-  const [showEditConfirm, setShowEditConfirm] = useState(false);
-  const [showHistory, setShowHistory]         = useState(false);
-
-  // ── Ajout d'un nouveau programme (Pro/Business) ──
-  const [showAddModal, setShowAddModal]   = useState(false);
-  const [newProgName, setNewProgName]     = useState("");
-  const [newThreshold, setNewThreshold]  = useState("10");
-  const [newReward, setNewReward]        = useState("");
-  const [addingProg, setAddingProg]      = useState(false);
-  const [addProgError, setAddProgError]  = useState<string | null>(null);
 
   // Charger les données depuis l'API
   useEffect(() => {
@@ -117,11 +105,25 @@ export default function BusinessPage() {
       .then((data: Business | null) => {
         if (!data) return;
         setBusiness(data);
-        setName(data.name ?? "");
         const s = data.settings_json ?? {};
-        setType(s.establishment_type ?? "salon_coiffure");
-        setAddress(s.address ?? "");
-        setPhone(s.phone ?? "");
+        const snap = {
+          name:    data.name ?? "",
+          type:    s.establishment_type ?? "salon_coiffure",
+          address: s.address ?? "",
+          phone:   s.phone ?? "",
+        };
+        setName(snap.name);
+        setType(snap.type);
+        setAddress(snap.address);
+        setPhone(snap.phone);
+        setSavedSnap(snap);
+
+        // Scroll vers la section demandée via ?scroll=
+        const target = searchParams.get("scroll");
+        if (target) {
+          // Léger délai pour que le DOM soit rendu
+          setTimeout(() => scrollToSection(target), 100);
+        }
       })
       .catch(() => setLoadError(true));
   }, []);
@@ -161,6 +163,7 @@ export default function BusinessPage() {
         return;
       }
 
+      setSavedSnap({ name: name.trim(), type, address: address.trim(), phone: phone.trim() });
       setSaved1(true);
       setTimeout(() => setSaved1(false), 3000);
     } catch {
@@ -170,132 +173,60 @@ export default function BusinessPage() {
     }
   }
 
-  // ── Ouvrir la modale d'édition pour un programme ────────────────────────────
-  function openEditModal(p: Program) {
-    setEditingProgram(p);
-    setEditName(p.name);
-    setEditThreshold(String(p.config_json.threshold ?? 10));
-    setEditReward(p.config_json.reward_label ?? "");
-    setEditError(null);
-    setShowEditConfirm(false);
-  }
+  // ── Recherche Google My Business ────────────────────────────────────────────
+  const [gmbResults, setGmbResults]           = useState<Array<{ place_id: string; name: string; address: string; type: string }>>([]);
+  const [gmbLoading, setGmbLoading]           = useState(false);
+  const [gmbOpen, setGmbOpen]                 = useState(false);
+  const [gmbImported, setGmbImported]         = useState(false);
+  const gmbTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Valider les champs et passer à l'étape de confirmation ──────────────────
-  function handleEditSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const t = parseInt(editThreshold, 10);
-    if (editName.trim().length < 2) {
-      setEditError("Le nom doit faire au moins 2 caractères.");
-      return;
-    }
-    if (isNaN(t) || t < 1 || t > 50) {
-      setEditError("Le nombre de tampons doit être entre 1 et 50.");
-      return;
-    }
-    if (editReward.trim().length < 2) {
-      setEditError("Décrivez la récompense (au moins 2 caractères).");
-      return;
-    }
-    setEditError(null);
-    setShowEditConfirm(true);
-  }
+  function handleGmbInput(value: string) {
+    setGmbImported(false);
+    if (gmbTimeout.current) clearTimeout(gmbTimeout.current);
+    if (value.trim().length < 2) { setGmbResults([]); return; }
 
-  // ── Confirmer et enregistrer (versioning) ───────────────────────────────────
-  async function confirmEditProgram() {
-    if (!editingProgram) return;
-
-    setEditSaving(true);
-    setEditError(null);
-
-    const token = localStorage.getItem("access_token");
-
-    try {
-      const res = await fetch(`${API_URL}/api/v1/business/programs/${editingProgram.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          name: editName.trim(),
-          config: {
-            threshold: parseInt(editThreshold, 10),
-            reward_label: editReward.trim(),
-          },
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        setEditError(data.message ?? "Erreur lors de la sauvegarde.");
-        setShowEditConfirm(false);
-        return;
+    gmbTimeout.current = setTimeout(async () => {
+      setGmbLoading(true);
+      try {
+        const results = await apiClient.get<Array<{ place_id: string; name: string; address: string; type: string }>>(
+          `/business/places/search?query=${encodeURIComponent(value)}`
+        );
+        setGmbResults(results);
+      } catch {
+        // Silencieux (401 géré globalement par apiClient)
+      } finally {
+        setGmbLoading(false);
       }
-
-      const { active: newProgram } = await res.json();
-
-      // Mettre à jour la liste : ancien programme archivé, nouveau programme actif
-      setBusiness((b) => {
-        if (!b) return b;
-        return {
-          ...b,
-          programs: [
-            newProgram,
-            ...b.programs.map((p) =>
-              p.id === editingProgram.id ? { ...p, status: "ARCHIVED" as const } : p
-            ),
-          ],
-        };
-      });
-
-      setEditingProgram(null);
-      setShowEditConfirm(false);
-    } catch {
-      setEditError("Impossible de contacter l'API.");
-      setShowEditConfirm(false);
-    } finally {
-      setEditSaving(false);
-    }
+    }, 400);
   }
 
-  // ── Ajouter un nouveau programme ────────────────────────────────────────────
-  async function addProgram() {
-    const t = parseInt(newThreshold, 10);
-    if (!newProgName.trim() || isNaN(t) || t < 1 || t > 50 || !newReward.trim()) {
-      setAddProgError("Remplissez tous les champs correctement.");
-      return;
-    }
-
-    setAddingProg(true);
-    setAddProgError(null);
-    const token = localStorage.getItem("access_token");
-
+  async function selectGmbPlace(placeId: string) {
+    setGmbResults([]);
+    setGmbLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/v1/business/programs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          name: newProgName.trim(),
-          type: "STAMPS",
-          config: { threshold: t, reward_label: newReward.trim() },
-        }),
-      });
+      const details = await apiClient.get<{
+        name?: string; address?: string; phone?: string; type?: string;
+      }>(`/business/places/details?place_id=${placeId}`);
 
-      const data = await res.json();
+      // Remplir le formulaire avec les données Google
+      if (details.name)    setName(details.name);
+      if (details.address) setAddress(details.address);
+      if (details.phone)   setPhone(details.phone);
+      if (details.type)    setType(details.type);
 
-      if (!res.ok) {
-        setAddProgError(data.message ?? "Erreur lors de la création.");
-        return;
-      }
-
-      setBusiness((b) => b ? { ...b, programs: [data, ...b.programs] } : b);
-      setShowAddModal(false);
-      setNewProgName("");
-      setNewThreshold("10");
-      setNewReward("");
-    } catch {
-      setAddProgError("Impossible de contacter l'API.");
+      setGmbOpen(false);
+      setGmbImported(true);
     } finally {
-      setAddingProg(false);
+      setGmbLoading(false);
     }
   }
+
+  // ── Détection de changements dans le formulaire général ─────────────────────
+  const isDirty =
+    name.trim()    !== savedSnap.name    ||
+    type           !== savedSnap.type    ||
+    address.trim() !== savedSnap.address ||
+    phone.trim()   !== savedSnap.phone;
 
   // ── Indicateur de progression ────────────────────────────────────────────────
   const step1Done = name.trim().length >= 2 && type !== "";
@@ -322,157 +253,11 @@ export default function BusinessPage() {
   }
 
   const activePrograms = business?.programs?.filter((p) => p.status === "ACTIVE") ?? [];
-  const archivedPrograms = business?.programs?.filter((p) => p.status === "ARCHIVED") ?? [];
   const plan = business?.plan ?? "STARTER";
   const limit = PLAN_LIMITS[plan] ?? 1;
-  const isLocked = plan === "STARTER";
-  const isFull = activePrograms.length >= limit;
 
   return (
     <div className="space-y-8">
-
-      {/* ── Modale d'édition d'un programme — étape 1 : champs ── */}
-      {editingProgram && !showEditConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
-            <div>
-              <h3 className="font-semibold text-gray-900">Modifier le programme</h3>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Version actuelle : v{editingProgram.version} — une nouvelle version sera créée.
-              </p>
-            </div>
-            <form onSubmit={handleEditSubmit} className="space-y-4">
-              <Field label="Nom du programme">
-                <input
-                  type="text"
-                  required
-                  minLength={2}
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Ex : Carte fidélité, Carte coiffure…"
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="Nombre de tampons pour une récompense">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min={1}
-                    max={50}
-                    required
-                    value={editThreshold}
-                    onChange={(e) => setEditThreshold(e.target.value)}
-                    className={`${inputClass} w-24`}
-                  />
-                  <span className="text-sm text-gray-500">tampons</span>
-                </div>
-              </Field>
-              <Field label="Description de la récompense">
-                <input
-                  type="text"
-                  required
-                  value={editReward}
-                  onChange={(e) => setEditReward(e.target.value)}
-                  placeholder="Ex : 10€ de réduction, 1 soin offert…"
-                  className={inputClass}
-                />
-              </Field>
-              {editError && <ErrorBox message={editError} />}
-              <div className="flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setEditingProgram(null)}
-                  className="py-2 px-4 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Suivant →
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modale d'édition — étape 2 : confirmation versioning ── */}
-      {editingProgram && showEditConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Créer une nouvelle version ?</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Cette action va créer la <strong>version {editingProgram.version + 1}</strong> de « {editingProgram.name} ».
-                </p>
-              </div>
-            </div>
-            <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 text-sm text-amber-800 space-y-1">
-              <p>• Les clients déjà inscrits <strong>conservent leurs règles actuelles</strong> jusqu'à leur prochaine récompense.</p>
-              <p>• Les <strong>nouveaux clients</strong> bénéficieront des nouvelles conditions.</p>
-            </div>
-            {editError && <ErrorBox message={editError} />}
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowEditConfirm(false)}
-                className="py-2 px-4 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                ← Retour
-              </button>
-              <button
-                onClick={confirmEditProgram}
-                disabled={editSaving}
-                className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                {editSaving ? "Enregistrement…" : "Confirmer la modification"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modale ajout programme (Pro/Business) ── */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900">Nouveau programme de fidélité</h3>
-            <div className="space-y-3">
-              <Field label="Nom du programme">
-                <input type="text" value={newProgName} onChange={(e) => setNewProgName(e.target.value)}
-                  placeholder="Ex : Carte coiffure, Carte couleur…" className={inputClass} />
-              </Field>
-              <Field label="Nombre de tampons">
-                <div className="flex items-center gap-3">
-                  <input type="number" min={1} max={50} value={newThreshold}
-                    onChange={(e) => setNewThreshold(e.target.value)} className={`${inputClass} w-24`} />
-                  <span className="text-sm text-gray-500">tampons</span>
-                </div>
-              </Field>
-              <Field label="Récompense">
-                <input type="text" value={newReward} onChange={(e) => setNewReward(e.target.value)}
-                  placeholder="Ex : Coupe offerte, 15€ de réduction…" className={inputClass} />
-              </Field>
-            </div>
-            {addProgError && <ErrorBox message={addProgError} />}
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => { setShowAddModal(false); setAddProgError(null); }}
-                className="py-2 px-4 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                Annuler
-              </button>
-              <button onClick={addProgram} disabled={addingProg}
-                className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                {addingProg ? "Création…" : "Créer le programme"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* En-tête */}
       <div>
@@ -501,7 +286,7 @@ export default function BusinessPage() {
             </p>
             <div className="space-y-1">
               <StepProgress icon={Store}   done={step1Done} label="Informations générales" desc="Nom, type, adresse, téléphone" onClick={() => scrollToSection("section-general")} />
-              <StepProgress icon={Star}    done={step2Done} label="Programmes de fidélité" desc="Tampons et récompense"         onClick={() => scrollToSection("section-programs")} />
+              <StepProgress icon={Star}    done={step2Done} label="Programmes de fidélité" desc="Tampons et récompense"         onClick={() => router.push("/dashboard/programs")} />
               <StepProgress icon={Palette} done={step3Done} label="Apparence"              desc="Logo de l'établissement"       onClick={() => scrollToSection("section-appearance")} />
             </div>
           </>
@@ -515,17 +300,68 @@ export default function BusinessPage() {
       <Section id="section-general" title="Informations générales" icon={Store} highlighted={highlightedSection === "section-general"}>
         <form onSubmit={saveGeneralInfo} className="space-y-4">
 
-          <Field label="Nom de l'établissement">
-            <input
-              type="text"
-              required
-              minLength={2}
-              placeholder="Ex : Salon Élégance"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={inputClass}
-            />
-          </Field>
+          {/* ── Nom + recherche Google intégrée ── */}
+          <div className="relative">
+            <Field label="Nom de l'établissement">
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  placeholder="Ex : Salon Élégance"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setGmbOpen(true);
+                    handleGmbInput(e.target.value);
+                  }}
+                  onFocus={() => { if (name.trim().length >= 2) setGmbOpen(true); }}
+                  onBlur={() => setTimeout(() => setGmbOpen(false), 150)}
+                  className={inputClass}
+                />
+                {gmbLoading && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                )}
+              </div>
+              <div className="mt-1.5 flex items-center gap-1">
+                <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" aria-hidden="true">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                <span className="text-xs text-gray-400">Suggestions Google My Business</span>
+              </div>
+            </Field>
+
+            {/* Dropdown résultats */}
+            {gmbOpen && gmbResults.length > 0 && (
+              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                {gmbResults.map((r) => (
+                  <button
+                    key={r.place_id}
+                    type="button"
+                    onClick={() => selectGmbPlace(r.place_id)}
+                    className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                  >
+                    <Search className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
+                      <p className="text-xs text-gray-400 truncate">{r.address}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Confirmation import */}
+            {gmbImported && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+                <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                Données importées depuis Google — vérifiez et enregistrez.
+              </div>
+            )}
+          </div>
 
           <Field label="Type d'établissement">
             <select
@@ -537,44 +373,42 @@ export default function BusinessPage() {
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
-            <p className="mt-1.5 text-xs text-gray-400 flex items-center gap-1">
-              <span>Bientôt :</span>
-              <span className="text-blue-500">import automatique depuis Google My Business</span>
-            </p>
           </Field>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Adresse">
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="12 rue de la Paix, Paris"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className={`${inputClass} pl-8`}
-                />
-              </div>
-            </Field>
+          <Field label="Adresse">
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="12 rue de la Paix, Paris"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className={`${inputClass} pl-8`}
+              />
+            </div>
+          </Field>
 
-            <Field label="Téléphone">
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                <input
-                  type="tel"
-                  placeholder="01 23 45 67 89"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className={`${inputClass} pl-8`}
-                />
-              </div>
-            </Field>
-          </div>
+          <Field label="Téléphone">
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input
+                type="tel"
+                placeholder="07 72 04 72 20"
+                value={phone}
+                onChange={(e) => {
+                  const filtered = e.target.value.replace(/[^\d\s]/g, "");
+                  const digits = filtered.replace(/\s/g, "");
+                  if (digits.length <= 10) setPhone(filtered);
+                }}
+                className={`${inputClass} pl-8`}
+              />
+            </div>
+          </Field>
 
           {error1 && <ErrorBox message={error1} />}
 
           <div className="flex items-center gap-3">
-            <button type="submit" disabled={saving1} className={btnPrimary}>
+            <button type="submit" disabled={saving1 || !isDirty} className={btnPrimary}>
               {saving1 ? "Enregistrement…" : "Enregistrer"}
             </button>
             {saved1 && <span className="text-sm text-green-600 font-medium">Sauvegardé ✓</span>}
@@ -582,101 +416,41 @@ export default function BusinessPage() {
         </form>
       </Section>
 
-      {/* ── Section 2 : Programmes de fidélité ── */}
+      {/* ── Section 2 : Programmes de fidélité (résumé + lien) ── */}
       <Section id="section-programs" title="Programmes de fidélité" icon={Star} highlighted={highlightedSection === "section-programs"}>
-
-        {/* Liste des programmes actifs */}
-        <div className="space-y-3">
-
-          {activePrograms.length === 0 && (
-            <p className="text-sm text-gray-400 py-2">Aucun programme actif.</p>
-          )}
-
-          {activePrograms.map((p) => (
-            <div key={p.id} className="border border-gray-200 rounded-xl p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-900 text-sm">{p.name}</span>
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full shrink-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                      v{p.version} — Actif
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    {p.config_json.threshold} tampons → <strong className="text-gray-700">{p.config_json.reward_label}</strong>
-                  </p>
+        {activePrograms.length === 0 ? (
+          <p className="text-sm text-gray-400">Aucun programme actif.</p>
+        ) : (
+          <div className="space-y-2">
+            {activePrograms.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2.5">
+                <Stamp className="h-4 w-4 text-blue-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-gray-900">{p.name}</span>
+                  <span className="ml-2 text-xs text-gray-400">
+                    {p.config_json.threshold} tampons → {p.config_json.reward_label}
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openEditModal(p)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
-                >
-                  <Pencil className="h-3 w-3" />
-                  Modifier
-                </button>
+                <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full shrink-0">
+                  v{p.version}
+                </span>
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Bouton ajouter / message limite */}
-        <div className={`${activePrograms.length > 0 ? "mt-4 pt-4 border-t border-gray-100" : "mt-2"}`}>
-          {isLocked ? (
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Lock className="h-3.5 w-3.5 shrink-0" />
-              <span>Plusieurs programmes actifs disponibles avec le plan <strong>Pro</strong> ou <strong>Business</strong></span>
-            </div>
-          ) : isFull ? (
-            <div className="flex items-center gap-2 text-xs text-amber-600">
-              <Lock className="h-3.5 w-3.5 shrink-0" />
-              <span>Limite atteinte ({activePrograms.length}/{limit} programmes). Passez au plan supérieur.</span>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Ajouter un programme ({activePrograms.length}/{limit})
-            </button>
-          )}
-        </div>
-
-        {/* Historique des versions archivées */}
-        {archivedPrograms.length > 0 && (
-          <div className="mt-4 border-t border-gray-100 pt-4">
-            <button
-              type="button"
-              onClick={() => setShowHistory((v) => !v)}
-              className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              {showHistory ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              Historique des versions ({archivedPrograms.length})
-            </button>
-            {showHistory && (
-              <div className="mt-3 space-y-2">
-                {archivedPrograms
-                  .sort((a, b) => b.version - a.version)
-                  .map((p) => (
-                    <div key={p.id} className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-medium text-gray-600 shrink-0">{p.name} — v{p.version}</span>
-                        <span className="text-gray-400 shrink-0">—</span>
-                        <span className="text-gray-500 truncate">
-                          {p.config_json.threshold} tampons = {p.config_json.reward_label}
-                        </span>
-                      </div>
-                      <span className="text-gray-400 shrink-0 ml-2">
-                        {new Date(p.created_at).toLocaleDateString("fr-FR")}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            )}
+            ))}
           </div>
         )}
+
+        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+          <span className="text-xs text-gray-400">
+            {activePrograms.length}/{limit === Infinity ? "∞" : limit} programme{limit !== 1 ? "s" : ""} actif{activePrograms.length !== 1 ? "s" : ""}
+          </span>
+          <Link
+            href="/dashboard/programs"
+            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            Gérer les programmes
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </Section>
 
       </div>{/* fin grille 2 colonnes */}

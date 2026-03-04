@@ -27,6 +27,17 @@ export class CustomerService {
    * Crée un nouveau client avec un QR secret aléatoire.
    */
   async create(businessId: string, input: CreateCustomerInput) {
+    // Vérifier l'unicité de l'email pour ce business
+    if (input.email) {
+      const existing = await prisma.customer.findFirst({
+        where: { business_id: businessId, email: input.email },
+        select: { id: true },
+      });
+      if (existing) {
+        throw Object.assign(new Error("Un client avec cet email existe déjà dans votre établissement."), { code: "EMAIL_TAKEN" });
+      }
+    }
+
     const qrSecret = crypto.randomBytes(32).toString("hex");
 
     const customer = await prisma.customer.create({
@@ -66,6 +77,7 @@ export class CustomerService {
         skip,
         take: per_page,
         orderBy: { created_at: "desc" },
+        include: { program: { select: { name: true } } },
       }),
       prisma.customer.count({ where }),
     ]);
@@ -92,6 +104,7 @@ export class CustomerService {
         wallet_passes: {
           select: { platform: true, serial: true, last_version: true },
         },
+        program: { select: { name: true } },
       },
     });
 
@@ -125,8 +138,10 @@ export class CustomerService {
     stamp_count: number;
     point_count: number;
     created_at: Date;
+    program_id?: string | null;
+    program?: { name: string } | null;
   }) {
-    const apiUrl = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001";
+    const appUrl = process.env["APP_URL"] ?? "http://localhost:3000";
     return {
       id: customer.id,
       name: customer.name,
@@ -134,8 +149,10 @@ export class CustomerService {
       email: customer.email,
       stamp_count: customer.stamp_count,
       point_count: customer.point_count,
-      qr_url: `${apiUrl}/qr/${customer.id}`,
+      qr_url: `${appUrl}/scan/${customer.id}`,
       created_at: customer.created_at.toISOString(),
+      program_id: customer.program_id ?? null,
+      program_name: customer.program?.name ?? null,
     };
   }
 }

@@ -186,6 +186,7 @@ model Customer {
 
   @@index([business_id])
   @@index([phone, business_id])
+  @@unique([email, business_id])  // un email ne peut pas être utilisé deux fois dans le même établissement
   @@map("customers")
 }
 

@@ -66,6 +66,10 @@ export async function walletRoutes(app: FastifyInstance) {
 
   // ─── Apple Wallet ───────────────────────────────────────────────────────
 
+  // Healthcheck de config Apple Wallet (utile en dev).
+  app.get("/apple/health", async (_request, reply) => {
+    return reply.send(appleService.getHealth());
+  });
   // Génère et stocke le .pkpass pour un client
   app.post(
     "/apple/:customerId/create",
@@ -169,3 +173,4 @@ export async function walletRoutes(app: FastifyInstance) {
     return reply.status(200).send();
   });
 }
+
