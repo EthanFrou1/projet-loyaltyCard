@@ -28,7 +28,7 @@ interface Business {
   name: string;
   slug: string;
   logo_url: string | null;
-  plan: string;
+  plan: Plan;
   settings_json: {
     establishment_type?: string;
     address?: string;
@@ -36,6 +36,8 @@ interface Business {
   } | null;
   programs: Array<{ status: string; config_json: { threshold?: number; reward_label?: string } }>;
 }
+
+type Plan = "STARTER" | "PRO" | "BUSINESS";
 
 const ESTABLISHMENT_LABELS: Record<string, string> = {
   salon_coiffure:  "Salon de coiffure",
@@ -49,7 +51,7 @@ const ESTABLISHMENT_LABELS: Record<string, string> = {
   autre:           "Autre",
 };
 
-const PLAN_STYLES: Record<string, { label: string; className: string }> = {
+const PLAN_STYLES: Record<Plan, { label: string; className: string }> = {
   STARTER:  { label: "Starter",  className: "bg-gray-100 text-gray-600" },
   PRO:      { label: "Pro",      className: "bg-blue-100 text-blue-700" },
   BUSINESS: { label: "Business", className: "bg-violet-100 text-violet-700" },
@@ -59,13 +61,13 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const { data: stats, isLoading: statsLoading } = useSWR<Stats>(
     "/business/stats",
-    (url: string) => apiClient.get(url),
+    (url: string) => apiClient.get<Stats>(url),
     { refreshInterval: 30_000 }
   );
 
   const { data: business } = useSWR<Business>(
     "/business",
-    (url: string) => apiClient.get(url)
+    (url: string) => apiClient.get<Business>(url)
   );
 
   const [qrExpanded, setQrExpanded] = useState(false);

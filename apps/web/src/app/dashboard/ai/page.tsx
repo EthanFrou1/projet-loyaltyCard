@@ -29,8 +29,12 @@ interface JobResult {
   assets: Array<{ kind: string; url: string }>;
 }
 
+interface JobCreatedResponse {
+  job_id: string;
+}
+
 export default function AiPage() {
-  const { data: usage } = useSWR<UsageData>("/ai/usage", (url: string) => apiClient.get(url));
+  const { data: usage } = useSWR<UsageData>("/ai/usage", (url: string) => apiClient.get<UsageData>(url));
 
   return (
     <div className="space-y-6">
@@ -84,7 +88,7 @@ function CleanLogoForm() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await apiClient.post("/ai/clean-logo", { source_url: url });
+      const res = await apiClient.post<JobCreatedResponse>("/ai/clean-logo", { source_url: url });
       setJob({ id: res.job_id, status: "PENDING", assets: [] });
       pollJob(res.job_id, setJob);
     } finally {
@@ -117,7 +121,7 @@ function GeneratePassDesignForm() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await apiClient.post("/ai/generate-pass-design", {
+      const res = await apiClient.post<JobCreatedResponse>("/ai/generate-pass-design", {
         style_prompt: prompt,
         variants: 3,
       });
@@ -153,7 +157,7 @@ function GeneratePromoForm() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await apiClient.post("/ai/generate-promo-assets", {
+      const res = await apiClient.post<JobCreatedResponse>("/ai/generate-promo-assets", {
         promo_text: text,
         assets: ["story_ig", "poster_a4", "coupon"],
       });
@@ -245,7 +249,7 @@ function JobStatus({ job }: { job: JobResult | null }) {
 function pollJob(jobId: string, setJob: (j: JobResult) => void) {
   const interval = setInterval(async () => {
     try {
-      const data = await apiClient.get(`/ai/jobs/${jobId}`);
+      const data = await apiClient.get<JobResult>(`/ai/jobs/${jobId}`);
       setJob(data);
       if (data.status === "DONE" || data.status === "FAILED") {
         clearInterval(interval);

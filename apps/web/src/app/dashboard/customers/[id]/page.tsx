@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 /**
  * Page détail client
@@ -35,12 +35,12 @@ export default function CustomerDetailPage() {
 
   const { data: customer, mutate } = useSWR<CustomerDetailResponse>(
     `/customers/${id}`,
-    (url: string) => apiClient.get(url)
+    (url: string) => apiClient.get<CustomerDetailResponse>(url)
   );
 
   const { data: business } = useSWR<{ programs: Array<{ id: string; config_json: { threshold?: number } }> }>(
     "/business",
-    (url: string) => apiClient.get(url)
+    (url: string) => apiClient.get<{ programs: Array<{ id: string; config_json: { threshold?: number } }> }>(url)
   );
 
   const programId = business?.programs?.[0]?.id ?? null;
@@ -118,7 +118,7 @@ export default function CustomerDetailPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-        {/* â”€â”€ Bloc tampons (2 colonnes sur xl) â”€â”€ */}
+        {/* Bloc tampons (2 colonnes sur xl) */}
         <div className="xl:col-span-2 bg-white rounded-xl p-6 shadow-sm space-y-5">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">Tampons</h2>
@@ -181,7 +181,7 @@ export default function CustomerDetailPage() {
           )}
         </div>
 
-        {/* â”€â”€ QR Code â”€â”€ */}
+        {/* QR Code */}
         <div className="bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4">
           <h2 className="text-lg font-semibold text-gray-800">QR Code</h2>
           <div className="flex-1 flex flex-col items-center justify-center gap-3">
@@ -200,7 +200,7 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* â”€â”€ Informations client â”€â”€ */}
+      {/* Informations client */}
       {qrExpanded && typeof document !== "undefined" && createPortal(
         <div
           className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center"
@@ -250,7 +250,7 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* â”€â”€ Carte digitale â”€â”€ */}
+      {/* Carte digitale */}
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Carte digitale</h2>
         <p className="text-xs text-gray-400 mb-4">
@@ -314,7 +314,7 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* â”€â”€ Historique â”€â”€ */}
+      {/* Historique */}
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Historique des transactions</h2>
         {customer.transactions.length === 0 ? (
@@ -342,7 +342,7 @@ export default function CustomerDetailPage() {
   );
 }
 
-// â”€â”€â”€ Composants utilitaires â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Composants utilitaires
 
 function InfoItem({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (

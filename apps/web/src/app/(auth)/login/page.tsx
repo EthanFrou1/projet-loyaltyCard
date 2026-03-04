@@ -10,6 +10,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 
+interface LoginResponse {
+  access_token: string;
+  refresh_token: string;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -23,7 +28,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const data = await apiClient.post("/auth/login", { email, password });
+      const data = await apiClient.post<LoginResponse>("/auth/login", { email, password });
       // Stocker le token d'accès
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);

@@ -178,7 +178,7 @@ export default function ScanPage() {
         {/* En-tête client */}
         <div className="bg-white rounded-2xl p-6 shadow-sm text-center space-y-1">
           <div className="w-14 h-14 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-2xl font-bold mx-auto">
-            {name[0].toUpperCase()}
+            {name.charAt(0).toUpperCase()}
           </div>
           <p className="text-lg font-semibold text-gray-900 mt-3">{name}</p>
           {phone && <p className="text-sm text-gray-400">{phone}</p>}
