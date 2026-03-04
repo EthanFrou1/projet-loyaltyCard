@@ -10,7 +10,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Star, Plus, Lock, AlertTriangle, Stamp, Store, Palette, Smartphone,
@@ -113,6 +114,7 @@ function StatCard({
 
 export default function ProgramsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [business, setBusiness] = useState<Business | null>(null);
   const [loading, setLoading]   = useState(true);
 
@@ -148,10 +150,15 @@ export default function ProgramsPage() {
   const [designSaved, setDesignSaved]     = useState(false);
   const [designError, setDesignError]     = useState<string | null>(null);
 
-  // ── Section programmes archivés ──
   const [showArchived, setShowArchived] = useState(false);
+  const [qrExpanded, setQrExpanded] = useState(false);
 
-  // ── Chargement données ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setShowAddModal(true);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { router.push("/login"); return; }
@@ -436,7 +443,15 @@ export default function ProgramsPage() {
 
       {/* ── Modale création ── */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAddModal(false);
+              setAddError(null);
+            }
+          }}
+        >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
             <h3 className="font-semibold text-gray-900">Nouveau programme de fidélité</h3>
             <div className="space-y-3">
@@ -472,12 +487,12 @@ export default function ProgramsPage() {
       )}
 
       {/* ── En-tête ── */}
-      <div className="py-1 pb-4 flex items-start justify-between gap-4">
-        <div>
+      <div className="py-1 pb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900">Programmes de fidélité</h1>
           <p className="mt-1 text-sm text-gray-500">Gérez vos programmes de tampons et de récompenses.</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto shrink-0">
           {business?.plan && (
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${PLAN_STYLES[plan]?.className}`}>
               {PLAN_STYLES[plan]?.label} · {activePrograms.length}/{limit === Infinity ? "∞" : limit}
@@ -491,10 +506,11 @@ export default function ProgramsPage() {
           ) : (
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center justify-center gap-2 h-10 px-3 sm:px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              aria-label="Nouveau programme"
             >
               <Plus className="h-4 w-4" />
-              Nouveau programme
+              <span className="hidden sm:inline">Nouveau programme</span>
             </button>
           )}
         </div>
@@ -644,9 +660,14 @@ export default function ProgramsPage() {
                     QR code du programme
                   </p>
                   <div className="grid md:grid-cols-[180px_1fr] gap-5 items-center">
-                    <div className="w-[170px] h-[170px] border border-gray-200 rounded-xl p-2 bg-white flex items-center justify-center">
+                    <button
+                      type="button"
+                      title="Agrandir le QR code"
+                      onClick={() => setQrExpanded(true)}
+                      className="mx-auto w-[170px] h-[170px] border border-gray-200 rounded-xl p-2 bg-white flex items-center justify-center hover:border-blue-300 transition-colors"
+                    >
                       <QRCodeSVG value={programJoinUrl || APP_URL} size={150} />
-                    </div>
+                    </button>
                     <div className="space-y-3">
                       <p className="text-sm text-gray-600">
                         Ce QR inscrit le client directement au programme <strong>{selectedProgram.name}</strong>.
@@ -672,6 +693,32 @@ export default function ProgramsPage() {
                     </div>
                   </div>
                 </div>
+
+                {qrExpanded && typeof document !== "undefined" && createPortal(
+                  <div
+                    className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center"
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) setQrExpanded(false);
+                    }}
+                  >
+                    <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">QR code du programme</h3>
+                        <button
+                          type="button"
+                          onClick={() => setQrExpanded(false)}
+                          className="text-sm text-gray-500 hover:text-gray-700"
+                        >
+                          Fermer
+                        </button>
+                      </div>
+                      <div className="border border-gray-200 rounded-xl p-3 w-fit mx-auto bg-white">
+                        <QRCodeSVG value={programJoinUrl || APP_URL} size={260} />
+                      </div>
+                    </div>
+                  </div>,
+                  document.body
+                )}
 
                 {/* Règle visuelle */}
                 <div className="bg-gray-50 rounded-xl p-5">
@@ -1260,3 +1307,4 @@ function BarcodeSvg() {
     </div>
   );
 }
+

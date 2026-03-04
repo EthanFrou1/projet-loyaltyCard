@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { QRCodeSVG } from "qrcode.react";
+import { createPortal } from "react-dom";
 import { ArrowLeft, Smartphone, CheckCircle2, Circle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
@@ -48,6 +49,7 @@ export default function CustomerDetailPage() {
   const [loading, setLoading] = useState<"stamp" | "redeem" | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [appleHealth, setAppleHealth] = useState<AppleWalletHealth | null>(null);
+  const [qrExpanded, setQrExpanded] = useState(false);
 
   useEffect(() => {
     fetch(`${API_URL}/api/v1/wallet/apple/health`)
@@ -116,7 +118,7 @@ export default function CustomerDetailPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-        {/* ── Bloc tampons (2 colonnes sur xl) ── */}
+        {/* â”€â”€ Bloc tampons (2 colonnes sur xl) â”€â”€ */}
         <div className="xl:col-span-2 bg-white rounded-xl p-6 shadow-sm space-y-5">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">Tampons</h2>
@@ -179,11 +181,18 @@ export default function CustomerDetailPage() {
           )}
         </div>
 
-        {/* ── QR Code ── */}
+        {/* â”€â”€ QR Code â”€â”€ */}
         <div className="bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4">
           <h2 className="text-lg font-semibold text-gray-800">QR Code</h2>
           <div className="flex-1 flex flex-col items-center justify-center gap-3">
-            <QRCodeSVG value={customer.qr_url} size={160} />
+            <button
+              type="button"
+              title="Agrandir le QR code"
+              onClick={() => setQrExpanded(true)}
+              className="border border-gray-200 rounded-xl p-2 bg-white hover:border-blue-300 transition-colors"
+            >
+              <QRCodeSVG value={customer.qr_url} size={160} />
+            </button>
             <p className="text-xs text-center text-gray-400">
               Le client scanne ce code pour valider son passage
             </p>
@@ -191,7 +200,32 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* ── Informations client ── */}
+      {/* â”€â”€ Informations client â”€â”€ */}
+      {qrExpanded && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setQrExpanded(false);
+          }}
+        >
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">QR Code client</h3>
+              <button
+                type="button"
+                onClick={() => setQrExpanded(false)}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Fermer
+              </button>
+            </div>
+            <div className="border border-gray-200 rounded-xl p-3 w-fit mx-auto bg-white">
+              <QRCodeSVG value={customer.qr_url} size={260} />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Informations</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
@@ -216,7 +250,7 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* ── Carte digitale ── */}
+      {/* â”€â”€ Carte digitale â”€â”€ */}
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Carte digitale</h2>
         <p className="text-xs text-gray-400 mb-4">
@@ -280,7 +314,7 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* ── Historique ── */}
+      {/* â”€â”€ Historique â”€â”€ */}
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Historique des transactions</h2>
         {customer.transactions.length === 0 ? (
@@ -308,7 +342,7 @@ export default function CustomerDetailPage() {
   );
 }
 
-// ─── Composants utilitaires ───────────────────────────────────────────────────
+// â”€â”€â”€ Composants utilitaires â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function InfoItem({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
@@ -318,3 +352,4 @@ function InfoItem({ label, value, highlight }: { label: string; value: string; h
     </div>
   );
 }
+

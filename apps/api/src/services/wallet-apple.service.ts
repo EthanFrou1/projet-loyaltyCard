@@ -1,7 +1,7 @@
-/**
+﻿/**
  * AppleWalletService
  *
- * Generation et gestion des passes Apple Wallet (.pkpass).
+ * Génération et gestion des passes Apple Wallet (.pkpass).
  */
 
 import { createHmac } from "node:crypto";
@@ -50,7 +50,7 @@ export class AppleWalletService {
   private storage = new StorageService();
 
   /**
-   * Genere un .pkpass pour un client et le stocke sur R2.
+   * Génère un .pkpass pour un client et le stocke sur R2.
    */
   async createPass(businessId: string, customerId: string) {
     const customer = await prisma.customer.findFirst({
@@ -58,7 +58,7 @@ export class AppleWalletService {
       include: { business: true },
     });
 
-    if (!customer) throw new Error("Client non trouve");
+    if (!customer) throw new Error("Client non trouvé");
 
     const serial = `loyalty-${customerId}`;
     const authToken = this.generateAuthToken(serial);
@@ -67,7 +67,7 @@ export class AppleWalletService {
     const pass = new PKPass({}, certificates, {
       formatVersion: 1,
       serialNumber: serial,
-      description: `Carte fidelite ${customer.business.name}`,
+      description: `Carte fidélité ${customer.business.name}`,
       organizationName: customer.business.name,
       passTypeIdentifier: this.passTypeId,
       teamIdentifier: this.teamId,
@@ -105,7 +105,7 @@ export class AppleWalletService {
 
     pass.backFields.push({
       key: "reward",
-      label: "Recompense",
+      label: "Récompense",
       value: "Voir programme en boutique",
     });
 
@@ -117,7 +117,7 @@ export class AppleWalletService {
 
     pass.setBarcodes(`${this.appUrl}/scan/${customer.id}`);
 
-    // Apple exige un icon. On met un PNG minimal par defaut.
+    // Apple exige un icon. On met un PNG minimal par défaut.
     const icon = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7kL5EAAAAASUVORK5CYII=",
       "base64"
@@ -159,7 +159,7 @@ export class AppleWalletService {
   }
 
   /**
-   * Telecharge le .pkpass d'un client (par customer ID).
+   * Télécharge le .pkpass d'un client (par customer ID).
    */
   async downloadPass(customerId: string): Promise<Buffer | null> {
     let pass = await prisma.walletPass.findFirst({
@@ -195,7 +195,7 @@ export class AppleWalletService {
   }
 
   /**
-   * Telecharge le .pkpass par serial (utilise par le PassKit Web Service d'iOS).
+   * Télécharge le .pkpass par serial (utilisé par le PassKit Web Service d'iOS).
    */
   async downloadPassBySerial(serial: string): Promise<Buffer | null> {
     const pass = await prisma.walletPass.findFirst({
@@ -217,7 +217,7 @@ export class AppleWalletService {
   }
 
   /**
-   * Enregistre un device iPhone pour les push notifications PassKit.
+   * Enregistre un appareil iPhone pour les push notifications PassKit.
    */
   async registerDevice(input: RegisterDeviceInput) {
     const pass = await prisma.walletPass.findFirst({
@@ -245,7 +245,7 @@ export class AppleWalletService {
   }
 
   /**
-   * Desenregistre un device.
+   * Désenregistre un appareil.
    */
   async unregisterDevice(input: UnregisterDeviceInput) {
     const pass = await prisma.walletPass.findFirst({
@@ -264,7 +264,7 @@ export class AppleWalletService {
 
   /**
    * Envoie une notification APNs pour forcer le refresh du pass sur iOS.
-   * TODO : implementer avec `apn` ou `node-apn`
+   * TODO : implémenter avec `apn` ou `node-apn`
    */
   async pushUpdate(customerId: string) {
     const devices = await prisma.appleDevice.findMany({
@@ -310,7 +310,7 @@ export class AppleWalletService {
       issues.push("APPLE_WWDR_CERT_PATH manquant ou fichier introuvable.");
     }
     if (!checks.web_service_url_https) {
-      issues.push("APPLE_PASSKIT_WEB_SERVICE_URL doit etre en HTTPS public.");
+      issues.push("APPLE_PASSKIT_WEB_SERVICE_URL doit être en HTTPS public.");
     }
 
     return {
@@ -338,13 +338,13 @@ export class AppleWalletService {
 
     if (!this.signerCertPath || !this.signerKeyPath || !this.wwdrCertPath) {
       throw new Error(
-        "Certificats Apple incomplets. Definir APPLE_SIGNER_CERT_PATH, APPLE_SIGNER_KEY_PATH et APPLE_WWDR_CERT_PATH."
+        "Certificats Apple incomplets. Définir APPLE_SIGNER_CERT_PATH, APPLE_SIGNER_KEY_PATH et APPLE_WWDR_CERT_PATH."
       );
     }
 
     if (this.signerCertPath.endsWith(".p12") || this.signerKeyPath.endsWith(".p12")) {
       throw new Error(
-        "APPLE_SIGNER_CERT_PATH/APPLE_SIGNER_KEY_PATH doivent etre des PEM. Convertis le .p12 en cert+key PEM."
+        "APPLE_SIGNER_CERT_PATH/APPLE_SIGNER_KEY_PATH doivent être des PEM. Convertis le .p12 en cert+key PEM."
       );
     }
 
@@ -364,3 +364,4 @@ export class AppleWalletService {
     };
   }
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 /**
  * Public join page scanned from business QR.
@@ -125,7 +125,7 @@ export default function JoinPage() {
 
       router.push(`/welcome/${data.id}?slug=${slug}&new=${!data.already_registered}`);
     } catch {
-      setError("Impossible de contacter le serveur. Reessayez.");
+      setError("Impossible de contacter le serveur. Réessayez.");
     } finally {
       setLoading(false);
     }
@@ -136,9 +136,9 @@ export default function JoinPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="text-center">
           <p className="text-4xl mb-4">Search</p>
-          <h1 className="text-xl font-bold text-gray-900">Etablissement introuvable</h1>
+          <h1 className="text-xl font-bold text-gray-900">Établissement introuvable</h1>
           <p className="text-sm text-gray-500 mt-2">
-            Ce lien n'est pas valide. Demandez le QR code a votre commercant.
+            Ce lien n'est pas valide. Demandez le QR code à votre commerçant.
           </p>
         </div>
       </div>
@@ -170,7 +170,7 @@ export default function JoinPage() {
           )}
           <div>
             <h1 className="text-xl font-bold text-gray-900">{business.name}</h1>
-            <p className="text-sm text-gray-500 mt-1">Creez votre carte fidelite gratuite</p>
+            <p className="text-sm text-gray-500 mt-1">Créez votre carte fidélité gratuite</p>
           </div>
 
           <div
@@ -193,7 +193,7 @@ export default function JoinPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {!hasPresetProgram && (business.programs?.length ?? 0) > 1 && (
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Programme de fidelite *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Programme de fidélité *</label>
                 <select
                   value={selectedProgramId ?? ""}
                   onChange={(e) => setSelectedProgramId(e.target.value || null)}
@@ -211,7 +211,7 @@ export default function JoinPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Prenom *</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Prénom *</label>
                 <input
                   type="text"
                   required
@@ -248,13 +248,13 @@ export default function JoinPage() {
                 autoComplete="email"
               />
               <p className="text-xs text-gray-400 mt-1">
-                Pour retrouver votre carte si vous changez de telephone.
+                Pour retrouver votre carte si vous changez de téléphone.
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Telephone *
+                Téléphone *
               </label>
               <input
                 type="tel"
@@ -271,7 +271,7 @@ export default function JoinPage() {
                 inputMode="tel"
               />
               {phone && !phoneValid && (
-                <p className="text-xs text-red-500 mt-1">Numéro invalide — 10 chiffres requis.</p>
+                <p className="text-xs text-red-500 mt-1">Numéro invalide - 10 chiffres requis.</p>
               )}
             </div>
 
@@ -302,7 +302,7 @@ export default function JoinPage() {
               className="w-full py-3 px-4 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-opacity text-sm"
               style={{ backgroundColor: brandColor, color: textOnBrand }}
             >
-              {loading ? "Création de votre carte..." : "Obtenir ma carte fidélité →"}
+              {loading ? "Création de votre carte..." : "Obtenir ma carte fidélité ->"}
             </button>
           </form>
         </div>
@@ -313,3 +313,4 @@ export default function JoinPage() {
 
 const inputClass =
   "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+

@@ -1,23 +1,25 @@
 "use client";
 
-/**
- * Page liste des clients
- * - Recherche par nom / téléphone / email
- * - Tableau paginé avec le compteur de tampons de chaque client
- * - Modal "Nouveau client" inline (plus de lien mort vers /new)
- */
-
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Search, UserPlus, X } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 import type { PaginatedResponse, CustomerResponse } from "@loyalty/types";
 
 export default function CustomersPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setShowModal(true);
+    }
+  }, [searchParams]);
 
   const { data, isLoading, mutate } = useSWR<PaginatedResponse<CustomerResponse>>(
     `/customers?search=${search}&page=${page}&per_page=20`,
@@ -26,87 +28,81 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
         <button
           onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
           <UserPlus className="h-4 w-4" />
           Nouveau client
         </button>
       </div>
 
-      {/* Barre de recherche */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <input
           type="text"
           placeholder="Rechercher par nom, téléphone ou email…"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
           className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
-      {/* Tableau */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Programme</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tampons</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Membre depuis</th>
-              <th className="px-6 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {isLoading ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-[780px] w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-400">
-                  Chargement…
-                </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Programme</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tampons</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Membre depuis</th>
               </tr>
-            ) : data?.data.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center">
-                  <p className="text-sm text-gray-400">Aucun client trouvé</p>
-                </td>
-              </tr>
-            ) : (
-              data?.data.map((customer) => (
-                <tr key={customer.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{customer.name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{customer.phone ?? "—"}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {customer.program_name
-                      ? <span className="text-blue-700 font-medium">{customer.program_name}</span>
-                      : <span className="text-gray-300">—</span>
-                    }
-                  </td>
-                  <td className="px-6 py-4">
-                    <StampBadge count={customer.stamp_count} />
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(customer.created_at).toLocaleDateString("fr-FR")}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <Link
-                      href={`/dashboard/customers/${customer.id}`}
-                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      Voir →
-                    </Link>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-400">
+                    Chargement…
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : data?.data.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center">
+                    <p className="text-sm text-gray-400">Aucun client trouvé</p>
+                  </td>
+                </tr>
+              ) : (
+                data?.data.map((customer) => (
+                  <tr key={customer.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/dashboard/customers/${customer.id}`)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); router.push(`/dashboard/customers/${customer.id}`); } }} tabIndex={0} role="link">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{customer.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{customer.phone ?? "—"}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {customer.program_name ? (
+                        <span className="text-blue-700 font-medium">{customer.program_name}</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <StampBadge count={customer.stamp_count} />
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {new Date(customer.created_at).toLocaleDateString("fr-FR")}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        {/* Pagination */}
         {data && data.total > data.per_page && (
           <div className="px-6 py-4 border-t flex items-center justify-between">
             <p className="text-sm text-gray-500">{data.total} clients au total</p>
@@ -130,30 +126,32 @@ export default function CustomersPage() {
         )}
       </div>
 
-      {/* Modal création client */}
       {showModal && (
         <CreateCustomerModal
           onClose={() => setShowModal(false)}
-          onCreated={() => { setShowModal(false); mutate(); }}
+          onCreated={() => {
+            setShowModal(false);
+            mutate();
+          }}
         />
       )}
     </div>
   );
 }
 
-// ─── Modal nouveau client ─────────────────────────────────────────────────────
-
 function CreateCustomerModal({
-  onClose, onCreated,
+  onClose,
+  onCreated,
 }: {
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [name, setName]   = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -173,10 +171,18 @@ function CreateCustomerModal({
     }
   }
 
-  return (
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-5">
         <div className="flex items-center justify-between">
@@ -220,9 +226,7 @@ function CreateCustomerModal({
           </Field>
 
           {error && (
-            <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
-              {error}
-            </p>
+            <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>
           )}
 
           <div className="flex gap-3 pt-1">
@@ -238,16 +242,15 @@ function CreateCustomerModal({
               disabled={loading}
               className="flex-1 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? "Création…" : "Créer le client"}
+              {loading ? "Création..." : "Créer le client"}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
-
-// ─── Composants utilitaires ───────────────────────────────────────────────────
 
 function Field({ label, required, optional, children }: {
   label: string;
@@ -271,13 +274,16 @@ function StampBadge({ count }: { count: number }) {
   const THRESHOLD = 10;
   const rewardAvailable = count >= THRESHOLD;
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-      rewardAvailable ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-    }`}>
-      {rewardAvailable ? "🎁 Récompense !" : `${count} / ${THRESHOLD}`}
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+        rewardAvailable ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+      }`}
+    >
+      {rewardAvailable ? "Récompense dispo" : `${count} / ${THRESHOLD}`}
     </span>
   );
 }
 
 const inputClass =
   "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+

@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 /**
- * Page de bienvenue affichee apres l'inscription du client.
+ * Page de bienvenue affichée après l'inscription du client.
  * Accessible sans authentification (le client arrive ici depuis /join).
  */
 
@@ -84,13 +84,13 @@ export default function WelcomePage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {isNew ? "Votre carte est prete !" : "Bienvenue de retour !"}
+              {isNew ? "Votre carte est prête !" : "Bienvenue de retour !"}
             </h1>
             {business && (
               <p className="text-sm text-gray-500 mt-1">
                 {isNew
-                  ? "Ajoutez-la a votre wallet pour l'avoir toujours avec vous."
-                  : `Votre carte ${business.name} est deja active.`}
+                  ? "Ajoutez-la à votre wallet pour l'avoir toujours avec vous."
+                  : `Votre carte ${business.name} est déjà active.`}
               </p>
             )}
           </div>
@@ -110,7 +110,7 @@ export default function WelcomePage() {
               )}
               <div>
                 <p className="font-semibold text-gray-900">{business.name}</p>
-                <p className="text-xs text-gray-500">Carte de fidelite</p>
+                <p className="text-xs text-gray-500">Carte de fidélité</p>
               </div>
             </div>
 
@@ -126,7 +126,7 @@ export default function WelcomePage() {
                 ))}
               </div>
               <p className="text-xs text-gray-500">
-                Apres <strong>{business.threshold} tampons</strong> : {business.reward_label}
+                Après <strong>{business.threshold} tampons</strong> : {business.reward_label}
               </p>
             </div>
           </div>
@@ -143,11 +143,11 @@ export default function WelcomePage() {
             className="flex items-center justify-center gap-3 w-full py-3.5 px-4 bg-black text-white font-semibold rounded-xl hover:bg-gray-900 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
             <AppleIcon />
-            {appleHealth?.ready === false ? "Apple Wallet indisponible" : "Ajouter a Apple Wallet"}
+            {appleHealth?.ready === false ? "Apple Wallet indisponible" : "Ajouter à Apple Wallet"}
           </button>
           {appleHealth?.ready === false && (
             <p className="text-xs text-amber-600 text-left px-1">
-              {appleHealth.issues[0] ?? "Configuration Apple Wallet incomplete."}
+              {appleHealth.issues[0] ?? "Configuration Apple Wallet incomplète."}
             </p>
           )}
 
@@ -157,12 +157,12 @@ export default function WelcomePage() {
             className="flex items-center justify-center gap-3 w-full py-3.5 px-4 bg-white text-gray-800 font-semibold rounded-xl border-2 border-gray-200 hover:bg-gray-50 disabled:opacity-60 transition-colors"
           >
             <GoogleIcon />
-            {googleLoading ? "Ouverture..." : "Ajouter a Google Wallet"}
+            {googleLoading ? "Ouverture..." : "Ajouter à Google Wallet"}
           </button>
         </div>
 
         <p className="text-xs text-gray-400 px-4">
-          Votre carte s'affiche dans votre application Wallet. Le commercant scannera votre QR code a chaque visite pour ajouter un tampon.
+          Votre carte s'affiche dans votre application Wallet. Le commerçant scannera votre QR code à chaque visite pour ajouter un tampon.
         </p>
       </div>
     </div>
@@ -187,6 +187,7 @@ function GoogleIcon() {
     </svg>
   );
 }
+
 
 
 

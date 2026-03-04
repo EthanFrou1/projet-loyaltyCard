@@ -7,9 +7,11 @@
  * - QR code d'inscription clients (cliquable pour agrandir)
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { createPortal } from "react-dom";
 import { Users, Stamp, Gift, MapPin, Phone, Store, QrCode, X, Pencil } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api-client";
@@ -54,6 +56,7 @@ const PLAN_STYLES: Record<string, { label: string; className: string }> = {
 };
 
 export default function DashboardPage() {
+  const searchParams = useSearchParams();
   const { data: stats, isLoading: statsLoading } = useSWR<Stats>(
     "/business/stats",
     (url: string) => apiClient.get(url),
@@ -66,10 +69,28 @@ export default function DashboardPage() {
   );
 
   const [qrExpanded, setQrExpanded] = useState(false);
+  const [highlightQr, setHighlightQr] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const registrationUrl = business?.slug ? `${APP_URL}/join/${business.slug}` : null;
   const activeProgram = business?.programs?.find((p) => p.status === "ACTIVE");
   const settings = business?.settings_json ?? {};
+
+  useEffect(() => {
+    if (searchParams.get("focus") !== "qr") return;
+    const timer = window.setTimeout(() => {
+      const el = document.getElementById("dashboard-qr-block");
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightQr(true);
+      window.setTimeout(() => setHighlightQr(false), 2600);
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [searchParams, business?.slug]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -182,7 +203,12 @@ export default function DashboardPage() {
         </div>
 
         {/* ── QR code d'inscription ── */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div
+          id="dashboard-qr-block"
+          className={`bg-white rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${
+            highlightQr ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-100" : ""
+          }`}
+        >
           <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
             <QrCode className="h-4 w-4 text-blue-600" />
             <h2 className="text-sm font-semibold text-gray-900">QR code d'inscription</h2>
@@ -243,9 +269,9 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Modale QR aggrandi ── */}
-      {qrExpanded && registrationUrl && (
+      {mounted && qrExpanded && registrationUrl && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6"
           onClick={() => setQrExpanded(false)}
         >
           <div
@@ -271,7 +297,8 @@ export default function DashboardPage() {
               <p className="text-xs text-gray-400 break-all">{registrationUrl}</p>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

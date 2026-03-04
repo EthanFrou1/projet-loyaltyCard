@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Public routes - no authentication required.
  *
  * GET  /join/:slug           -> business info + active programs
@@ -42,7 +42,7 @@ function extractProgramPreview(cfg: unknown): {
   const c = (cfg ?? {}) as ProgramConfig;
   return {
     threshold: c.threshold ?? 10,
-    reward_label: c.reward_label ?? "Recompense",
+    reward_label: c.reward_label ?? "Récompense",
     background_color: c.background_color ?? null,
     text_color: c.text_color ?? "light",
   };
@@ -57,7 +57,7 @@ export async function publicRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "BadRequest", message: "Slug invalide" });
     }
     if (!query.success) {
-      return reply.status(400).send({ error: "BadRequest", message: "Parametres invalides" });
+      return reply.status(400).send({ error: "BadRequest", message: "Paramètres invalides" });
     }
 
     const business = await prisma.business.findFirst({
@@ -72,7 +72,7 @@ export async function publicRoutes(app: FastifyInstance) {
     });
 
     if (!business) {
-      return reply.status(404).send({ error: "NotFound", message: "Etablissement non trouve" });
+      return reply.status(404).send({ error: "NotFound", message: "Établissement non trouvé" });
     }
 
     const allPrograms = business.programs.map((p) => ({
@@ -88,7 +88,7 @@ export async function publicRoutes(app: FastifyInstance) {
       : allPrograms;
 
     if (requestedProgramId && programs.length === 0) {
-      return reply.status(404).send({ error: "NotFound", message: "Programme non trouve pour cet etablissement" });
+      return reply.status(404).send({ error: "NotFound", message: "Programme non trouvé pour cet établissement" });
     }
 
     const defaultProgram = programs[0] ?? null;
@@ -98,7 +98,7 @@ export async function publicRoutes(app: FastifyInstance) {
       logo_url: business.logo_url,
       slug: business.slug,
       threshold: defaultProgram?.threshold ?? 10,
-      reward_label: defaultProgram?.reward_label ?? "Recompense",
+      reward_label: defaultProgram?.reward_label ?? "Récompense",
       default_program_id: defaultProgram?.id ?? null,
       programs,
     });
@@ -111,7 +111,7 @@ export async function publicRoutes(app: FastifyInstance) {
     const body = RegisterBody.safeParse(request.body);
 
     if (!params.success || !query.success || !body.success) {
-      return reply.status(400).send({ error: "ValidationError", message: "Donnees invalides" });
+      return reply.status(400).send({ error: "ValidationError", message: "Données invalides" });
     }
 
     const business = await prisma.business.findFirst({
@@ -120,7 +120,7 @@ export async function publicRoutes(app: FastifyInstance) {
     });
 
     if (!business) {
-      return reply.status(404).send({ error: "NotFound", message: "Etablissement non trouve" });
+      return reply.status(404).send({ error: "NotFound", message: "Établissement non trouvé" });
     }
 
     const activePrograms = await prisma.program.findMany({
@@ -140,7 +140,7 @@ export async function publicRoutes(app: FastifyInstance) {
     if (chosenProgramId && !activeProgramIds.has(chosenProgramId)) {
       return reply.status(400).send({
         error: "ValidationError",
-        message: "Programme invalide pour cet etablissement.",
+        message: "Programme invalide pour cet établissement.",
       });
     }
 
@@ -184,3 +184,4 @@ export async function publicRoutes(app: FastifyInstance) {
     });
   });
 }
+
