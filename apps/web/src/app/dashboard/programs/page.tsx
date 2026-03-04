@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import {
-  Star, Plus, Lock, AlertTriangle, Stamp,
+  Star, Plus, Lock, AlertTriangle, Stamp, Store, Palette, Smartphone,
   Users, BarChart2, Settings, Clock, CheckCircle,
   Gift, ChevronDown, ChevronUp,
 } from "lucide-react";
@@ -29,12 +29,19 @@ interface Program {
   version: number;
   status: "ACTIVE" | "ARCHIVED";
   created_at: string;
-  config_json: { threshold?: number; reward_label?: string };
+  config_json: {
+    threshold?: number;
+    reward_label?: string;
+    background_color?: string;
+    text_color?: "light" | "dark";
+  };
 }
 
 interface Business {
   id: string;
+  name: string;
   slug: string;
+  logo_url: string | null;
   plan: "STARTER" | "PRO" | "BUSINESS";
   programs: Program[];
 }
@@ -111,7 +118,7 @@ export default function ProgramsPage() {
 
   // ── Sélection de programme + sous-onglets ──
   const [selectedId, setSelectedId]   = useState<string | null>(null);
-  const [subTab, setSubTab]           = useState<"apercu" | "parametres" | "historique">("apercu");
+  const [subTab, setSubTab]           = useState<"apercu" | "carte" | "parametres" | "historique">("apercu");
 
   // ── Stats par programme ──
   const [statsMap, setStatsMap] = useState<Record<string, ProgramStats>>({});
@@ -132,6 +139,14 @@ export default function ProgramsPage() {
   const [newReward, setNewReward]        = useState("");
   const [addingProg, setAddingProg]      = useState(false);
   const [addError, setAddError]          = useState<string | null>(null);
+
+  // ── Design carte ──
+  const [editBgColor, setEditBgColor]     = useState("#1a1a2e");
+  const [editTextColor, setEditTextColor] = useState<"light" | "dark">("light");
+  const [designDirty, setDesignDirty]     = useState(false);
+  const [designSaving, setDesignSaving]   = useState(false);
+  const [designSaved, setDesignSaved]     = useState(false);
+  const [designError, setDesignError]     = useState<string | null>(null);
 
   // ── Section programmes archivés ──
   const [showArchived, setShowArchived] = useState(false);
@@ -243,9 +258,13 @@ export default function ProgramsPage() {
     setEditName(p.name);
     setEditThreshold(String(p.config_json.threshold ?? 10));
     setEditReward(p.config_json.reward_label ?? "");
+    setEditBgColor(p.config_json.background_color ?? "#1a1a2e");
+    setEditTextColor(p.config_json.text_color ?? "light");
     setEditStep("form");
     setEditDirty(false);
+    setDesignDirty(false);
     setEditError(null);
+    setDesignError(null);
   }
 
   function selectProgram(id: string) {
@@ -277,7 +296,12 @@ export default function ProgramsPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: editName.trim(),
-          config: { threshold: parseInt(editThreshold, 10), reward_label: editReward.trim() },
+          config: {
+            threshold: parseInt(editThreshold, 10),
+            reward_label: editReward.trim(),
+            background_color: editBgColor,
+            text_color: editTextColor,
+          },
         }),
       });
       if (!res.ok) {
@@ -338,6 +362,43 @@ export default function ProgramsPage() {
       setAddError("Impossible de contacter l'API.");
     } finally {
       setAddingProg(false);
+    }
+  }
+
+  // ── Sauvegarder le design sans versioning ────────────────────────────────────
+  async function saveDesign() {
+    if (!selectedId) return;
+    setDesignSaving(true);
+    setDesignError(null);
+    const token = localStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_URL}/api/v1/business/programs/${selectedId}/design`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ background_color: editBgColor, text_color: editTextColor }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setDesignError(d.message ?? "Erreur lors de la sauvegarde.");
+        return;
+      }
+      const updated = await res.json();
+      setBusiness((b) => {
+        if (!b) return b;
+        return {
+          ...b,
+          programs: b.programs.map((p) =>
+            p.id === selectedId ? { ...p, config_json: updated.config_json } : p
+          ),
+        };
+      });
+      setDesignDirty(false);
+      setDesignSaved(true);
+      setTimeout(() => setDesignSaved(false), 3000);
+    } catch {
+      setDesignError("Impossible de contacter l'API.");
+    } finally {
+      setDesignSaving(false);
     }
   }
 
@@ -410,8 +471,8 @@ export default function ProgramsPage() {
         </div>
       )}
 
-      {/* ── En-tête (sticky) ── */}
-      <div className="sticky top-0 z-10 bg-gray-100 -mx-8 px-8 -mt-8 pt-8 pb-4 flex items-start justify-between gap-4">
+      {/* ── En-tête ── */}
+      <div className="py-1 pb-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Programmes de fidélité</h1>
           <p className="mt-1 text-sm text-gray-500">Gérez vos programmes de tampons et de récompenses.</p>
@@ -507,10 +568,11 @@ export default function ProgramsPage() {
 
           {/* ── Sous-onglets ── */}
           <div className="flex border-b border-gray-100 px-6">
-            {(["apercu", "parametres", "historique"] as const).map((tab) => {
+            {(["apercu", "carte", "parametres", "historique"] as const).map((tab) => {
               const config = {
-                apercu:     { label: "Aperçu",      icon: BarChart2 },
-                parametres: { label: "Paramètres",  icon: Settings  },
+                apercu:     { label: "Aperçu",      icon: BarChart2  },
+                carte:      { label: "Carte Wallet", icon: Smartphone },
+                parametres: { label: "Paramètres",  icon: Settings   },
                 historique: {
                   label: `Historique${programHistory.length > 0 ? ` (${programHistory.length})` : ""}`,
                   icon: Clock,
@@ -631,6 +693,149 @@ export default function ProgramsPage() {
                         {selectedProgram.config_json.reward_label ?? "Récompense"}
                       </span>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Carte Wallet ── */}
+            {subTab === "carte" && (
+              <div className="space-y-6">
+                {/* Preview */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                    Aperçu de votre carte fidélité
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {/* Apple Wallet */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current text-gray-800" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                        </svg>
+                        <span className="text-xs font-medium text-gray-600">Apple Wallet</span>
+                      </div>
+                      <AppleCard
+                        businessName={business?.name ?? "Votre établissement"}
+                        logoUrl={business?.logo_url ?? null}
+                        programName={selectedProgram.name}
+                        threshold={selectedProgram.config_json.threshold ?? 10}
+                        rewardLabel={selectedProgram.config_json.reward_label ?? "Récompense"}
+                        bgColor={editBgColor}
+                        textColor={editTextColor}
+                      />
+                    </div>
+                    {/* Google Wallet */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        </svg>
+                        <span className="text-xs font-medium text-gray-600">Google Wallet</span>
+                      </div>
+                      <GoogleCard
+                        businessName={business?.name ?? "Votre établissement"}
+                        logoUrl={business?.logo_url ?? null}
+                        programName={selectedProgram.name}
+                        threshold={selectedProgram.config_json.threshold ?? 10}
+                        rewardLabel={selectedProgram.config_json.reward_label ?? "Récompense"}
+                        bgColor={editBgColor}
+                        textColor={editTextColor}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-3">
+                    Aperçu simulé — le QR code réel est généré à l'activation de la carte.
+                  </p>
+                </div>
+
+                {/* Personnalisation */}
+                <div className="border-t border-gray-100 pt-5 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-gray-500" />
+                    <p className="text-sm font-semibold text-gray-700">Personnalisation</p>
+                  </div>
+
+                  {/* Couleur de fond */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Couleur de fond</label>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {COLOR_PRESETS.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => { setEditBgColor(color); setDesignDirty(true); }}
+                          title={color}
+                          className="w-8 h-8 rounded-lg transition-all hover:scale-110 focus:outline-none"
+                          style={{
+                            background: color,
+                            boxShadow: editBgColor === color ? `0 0 0 2px white, 0 0 0 4px ${color}` : "none",
+                            transform: editBgColor === color ? "scale(1.15)" : undefined,
+                          }}
+                        />
+                      ))}
+                      {/* Color picker personnalisé */}
+                      <label className="relative cursor-pointer">
+                        <div
+                          className="w-8 h-8 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-blue-400 transition-colors text-xs"
+                          style={!COLOR_PRESETS.includes(editBgColor) ? { background: editBgColor, boxShadow: `0 0 0 2px white, 0 0 0 4px ${editBgColor}` } : {}}
+                        >
+                          {COLOR_PRESETS.includes(editBgColor) ? "+" : ""}
+                        </div>
+                        <input
+                          type="color"
+                          value={editBgColor}
+                          onChange={(e) => { setEditBgColor(e.target.value); setDesignDirty(true); }}
+                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                        />
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1.5">Couleur actuelle : <code className="bg-gray-100 px-1 rounded">{editBgColor}</code></p>
+                  </div>
+
+                  {/* Couleur du texte */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Couleur du texte</label>
+                    <div className="flex gap-3">
+                      {(["light", "dark"] as const).map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => { setEditTextColor(val); setDesignDirty(true); }}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm transition-colors ${
+                            editTextColor === val
+                              ? "border-blue-500 bg-blue-50 text-blue-700 font-medium"
+                              : "border-gray-200 text-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          <div
+                            className="w-4 h-4 rounded-full border border-gray-300"
+                            style={{ background: val === "light" ? "#ffffff" : "#111827" }}
+                          />
+                          {val === "light" ? "Texte clair" : "Texte foncé"}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1.5">
+                      Choisissez "Texte clair" pour les fonds sombres, "Texte foncé" pour les fonds clairs.
+                    </p>
+                  </div>
+
+                  {/* Bouton save */}
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={saveDesign}
+                      disabled={!designDirty || designSaving}
+                      className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {designSaving ? "Enregistrement…" : "Enregistrer le design"}
+                    </button>
+                    {designSaved && <span className="text-sm text-green-600 font-medium">Sauvegardé ✓</span>}
+                    {designError && <span className="text-sm text-red-600">{designError}</span>}
                   </div>
                 </div>
               </div>
@@ -877,6 +1082,181 @@ export default function ProgramsPage() {
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ─── Constantes palette ───────────────────────────────────────────────────────
+
+const COLOR_PRESETS = [
+  "#1a1a2e", "#0f3460", "#1b4332", "#2d1b33",
+  "#7b2d00", "#1c1c1c", "#0a2342", "#3d0a0a",
+];
+
+// ─── Types préview ────────────────────────────────────────────────────────────
+
+interface CardPreviewProps {
+  businessName: string;
+  logoUrl: string | null;
+  programName: string;
+  threshold: number;
+  rewardLabel: string;
+  bgColor: string;
+  textColor: "light" | "dark";
+}
+
+// ─── Apple Wallet mockup ──────────────────────────────────────────────────────
+
+function AppleCard({ businessName, logoUrl, programName, threshold, rewardLabel, bgColor, textColor }: CardPreviewProps) {
+  const tc  = textColor === "light" ? "#ffffff" : "#111827";
+  const dim = textColor === "light" ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.4)";
+  const filled = Math.min(Math.ceil(threshold * 0.55), threshold);
+  const dots   = Math.min(threshold, 10);
+
+  return (
+    <div
+      className="w-full max-w-[260px] mx-auto rounded-[22px] overflow-hidden shadow-xl select-none"
+      style={{ backgroundColor: bgColor }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
+        {logoUrl
+          ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+          : <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)" }}>
+              <Store className="h-4 w-4" style={{ color: tc }} />
+            </div>
+        }
+        <span className="flex-1 min-w-0 text-[13px] font-semibold truncate" style={{ color: tc }}>
+          {businessName}
+        </span>
+        <svg viewBox="0 0 20 14" className="h-3.5 w-3.5 shrink-0" style={{ opacity: 0.55 }}>
+          <rect width="20" height="14" rx="2.5" fill={tc} />
+          <rect y="4" width="20" height="3.5" fill={bgColor} />
+          <circle cx="15" cy="10" r="2.5" fill={bgColor} opacity="0.6" />
+        </svg>
+      </div>
+
+      <div className="mx-4 mb-3" style={{ height: 1, background: "rgba(255,255,255,0.12)" }} />
+
+      <div className="px-4 pb-3">
+        <p className="text-[9px] uppercase tracking-[0.12em] mb-0.5" style={{ color: dim }}>Programme</p>
+        <p className="text-[13px] font-bold mb-3.5" style={{ color: tc }}>{programName}</p>
+
+        <p className="text-[9px] uppercase tracking-[0.12em] mb-2" style={{ color: dim }}>Tampons</p>
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          {Array.from({ length: dots }).map((_, i) => (
+            <div
+              key={i}
+              className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold"
+              style={i < filled
+                ? { background: tc, color: bgColor }
+                : { background: "rgba(255,255,255,0.10)", border: `1px solid rgba(255,255,255,0.22)`, color: dim }
+              }
+            >
+              {i < filled ? "✓" : ""}
+            </div>
+          ))}
+          {threshold > 10 && (
+            <span className="text-[9px] self-center ml-1" style={{ color: dim }}>+{threshold - 10}</span>
+          )}
+        </div>
+        <p className="text-[10px]" style={{ color: dim }}>
+          {filled} / {threshold} — <span style={{ color: tc }}>{rewardLabel}</span>
+        </p>
+      </div>
+
+      <div className="mx-3 mb-3 bg-white rounded-xl p-3 flex flex-col items-center gap-1">
+        <QrSvg size={56} />
+        <p className="text-[8px] text-gray-400 tracking-wide">QR Code</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Google Wallet mockup ─────────────────────────────────────────────────────
+
+function GoogleCard({ businessName, logoUrl, programName, threshold, rewardLabel, bgColor, textColor }: CardPreviewProps) {
+  const tc     = textColor === "light" ? "#ffffff" : "#111827";
+  const filled = Math.min(Math.ceil(threshold * 0.55), threshold);
+
+  return (
+    <div className="w-full max-w-[260px] mx-auto rounded-[16px] overflow-hidden shadow-xl select-none bg-white border border-gray-100">
+      <div className="flex items-center gap-3 px-4 py-3.5" style={{ backgroundColor: bgColor }}>
+        {logoUrl
+          ? <img src={logoUrl} alt="" className="w-9 h-9 rounded-xl object-cover shrink-0" />
+          : <div className="w-9 h-9 rounded-xl shrink-0" style={{ background: "rgba(255,255,255,0.18)" }} />
+        }
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold truncate" style={{ color: tc }}>{businessName}</p>
+          <p className="text-[10px] truncate" style={{ color: tc, opacity: 0.7 }}>{programName}</p>
+        </div>
+      </div>
+
+      <div className="px-4 py-3.5 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] uppercase tracking-[0.1em] text-gray-400">Tampons</span>
+          <span className="text-[13px] font-bold text-gray-900">{filled} / {threshold}</span>
+        </div>
+        <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${(filled / threshold) * 100}%`, backgroundColor: bgColor }}
+          />
+        </div>
+        <div className="flex items-center justify-between pt-0.5">
+          <span className="text-[10px] uppercase tracking-[0.1em] text-gray-400">Récompense</span>
+          <span className="text-[11px] font-medium text-gray-700 max-w-[130px] text-right truncate">{rewardLabel}</span>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 py-3 px-4 flex flex-col items-center gap-1">
+        <BarcodeSvg />
+        <p className="text-[8px] text-gray-400 tracking-wide">Scanner à chaque visite</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── SVG helpers ──────────────────────────────────────────────────────────────
+
+function QrSvg({ size = 56 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="3" height="3" rx="0.4" fill="#111" />
+      <rect x="0.5" y="0.5" width="2" height="2" rx="0.2" fill="white" />
+      <rect x="1" y="1" width="1" height="1" fill="#111" />
+      <rect x="7" y="0" width="3" height="3" rx="0.4" fill="#111" />
+      <rect x="7.5" y="0.5" width="2" height="2" rx="0.2" fill="white" />
+      <rect x="8" y="1" width="1" height="1" fill="#111" />
+      <rect x="0" y="7" width="3" height="3" rx="0.4" fill="#111" />
+      <rect x="0.5" y="7.5" width="2" height="2" rx="0.2" fill="white" />
+      <rect x="1" y="8" width="1" height="1" fill="#111" />
+      <rect x="4" y="0" width="1" height="1" fill="#111" />
+      <rect x="6" y="0" width="1" height="1" fill="#111" />
+      <rect x="4" y="2" width="2" height="1" fill="#111" />
+      <rect x="3" y="3" width="1" height="2" fill="#111" />
+      <rect x="5" y="4" width="2" height="1" fill="#111" />
+      <rect x="7" y="4" width="1" height="2" fill="#111" />
+      <rect x="9" y="4" width="1" height="3" fill="#111" />
+      <rect x="4" y="6" width="1" height="1" fill="#111" />
+      <rect x="3" y="7" width="1" height="1" fill="#111" />
+      <rect x="5" y="8" width="2" height="1" fill="#111" />
+      <rect x="4" y="9" width="3" height="1" fill="#111" />
+    </svg>
+  );
+}
+
+function BarcodeSvg() {
+  const bars = [2, 1, 1, 2, 1, 3, 1, 1, 2, 1, 1, 1, 3, 2, 1, 1, 2, 1, 2, 3, 1, 1, 2];
+  return (
+    <div className="flex gap-[1.5px] items-stretch h-10">
+      {bars.map((w, i) => (
+        <div
+          key={i}
+          className="rounded-[1px]"
+          style={{ width: w * 1.5, background: i % 2 === 0 ? "#1a1a2e" : "transparent" }}
+        />
+      ))}
     </div>
   );
 }

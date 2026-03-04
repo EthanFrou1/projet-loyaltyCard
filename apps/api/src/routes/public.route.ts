@@ -29,13 +29,22 @@ const RegisterBody = z.object({
 type ProgramConfig = {
   threshold?: number;
   reward_label?: string;
+  background_color?: string;
+  text_color?: "light" | "dark";
 };
 
-function extractProgramPreview(cfg: unknown): { threshold: number; reward_label: string } {
+function extractProgramPreview(cfg: unknown): {
+  threshold: number;
+  reward_label: string;
+  background_color: string | null;
+  text_color: "light" | "dark";
+} {
   const c = (cfg ?? {}) as ProgramConfig;
   return {
     threshold: c.threshold ?? 10,
     reward_label: c.reward_label ?? "Recompense",
+    background_color: c.background_color ?? null,
+    text_color: c.text_color ?? "light",
   };
 }
 
@@ -43,8 +52,12 @@ export async function publicRoutes(app: FastifyInstance) {
   // GET /join/:slug - info for public sign-up page
   app.get("/:slug", async (request, reply) => {
     const params = SlugParams.safeParse(request.params);
+    const query = JoinQuery.safeParse(request.query);
     if (!params.success) {
       return reply.status(400).send({ error: "BadRequest", message: "Slug invalide" });
+    }
+    if (!query.success) {
+      return reply.status(400).send({ error: "BadRequest", message: "Parametres invalides" });
     }
 
     const business = await prisma.business.findFirst({
@@ -62,12 +75,21 @@ export async function publicRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: "NotFound", message: "Etablissement non trouve" });
     }
 
-    const programs = business.programs.map((p) => ({
+    const allPrograms = business.programs.map((p) => ({
       id: p.id,
       name: p.name,
       type: p.type,
       ...extractProgramPreview(p.config_json),
     }));
+
+    const requestedProgramId = query.data.program_id;
+    const programs = requestedProgramId
+      ? allPrograms.filter((p) => p.id === requestedProgramId)
+      : allPrograms;
+
+    if (requestedProgramId && programs.length === 0) {
+      return reply.status(404).send({ error: "NotFound", message: "Programme non trouve pour cet etablissement" });
+    }
 
     const defaultProgram = programs[0] ?? null;
 

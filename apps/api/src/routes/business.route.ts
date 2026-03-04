@@ -78,6 +78,8 @@ const UpdateBusinessBody = z.object({
   name: z.string().min(2).optional(),
   logo_url: z.string().url().optional(),
   settings_json: z.record(z.unknown()).optional(),
+  // Force la régénération du slug depuis le nom actuel (utile si le slug est obsolète)
+  regenerate_slug: z.boolean().optional(),
 });
 
 const CreateProgramBody = z.object({
@@ -147,25 +149,26 @@ export async function businessRoutes(app: FastifyInstance) {
       website?: string;
     };
 
-    // Proxy la photo via le backend pour ne pas exposer la clé API
-    let photo_url: string | null = null;
-    if (r.photos?.[0]?.photo_reference) {
-      const photoRef = r.photos[0].photo_reference;
-      const photoRes = await fetch(
-        `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${apiKey}`
-      );
-      if (photoRes.ok && photoRes.url) {
-        photo_url = photoRes.url; // Google redirige vers l'URL réelle de l'image
-      }
-    }
+    // Proxy jusqu'à 5 photos en parallèle — Google redirige vers l'URL CDN réelle
+    const photoRefs = (r.photos ?? []).slice(0, 5).map((p) => p.photo_reference);
+    const settled = await Promise.allSettled(
+      photoRefs.map((ref) =>
+        fetch(`https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${ref}&key=${apiKey}`)
+          .then((pr) => (pr.ok && pr.url ? pr.url : null))
+          .catch(() => null)
+      )
+    );
+    const photo_urls = settled
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((u): u is string => u !== null);
 
     return reply.send({
-      name:    r.name ?? null,
-      address: r.formatted_address ?? null,
-      phone:   r.formatted_phone_number ?? null,
-      type:    mapGoogleType(r.types ?? []),
-      website: r.website ?? null,
-      photo_url,
+      name:       r.name ?? null,
+      address:    r.formatted_address ?? null,
+      phone:      r.formatted_phone_number ?? null,
+      type:       mapGoogleType(r.types ?? []),
+      website:    r.website ?? null,
+      photo_urls, // tableau d'URLs CDN Google (jusqu'à 5)
     });
   });
 
@@ -293,14 +296,15 @@ export async function businessRoutes(app: FastifyInstance) {
 
     const current = await prisma.business.findUnique({
       where: { id: request.user.business_id },
-      select: { id: true, name: true },
+      select: { id: true, name: true, name_locked: true },
     });
 
     if (!current) {
       return reply.status(404).send({ error: "NotFound", message: "Business non trouvé" });
     }
 
-    const updateData: Record<string, unknown> = { ...body.data };
+    const { regenerate_slug, ...restData } = body.data;
+    const updateData: Record<string, unknown> = { ...restData };
     const incomingName = typeof body.data.name === "string" ? body.data.name.trim() : undefined;
 
     if (incomingName !== undefined) {
@@ -311,10 +315,20 @@ export async function businessRoutes(app: FastifyInstance) {
         });
       }
 
-      updateData.name = incomingName;
-      if (incomingName !== current.name) {
-        updateData.slug = await buildUniqueBusinessSlug(incomingName, current.id);
+      // Bloquer le changement si le nom est verrouillé
+      if (current.name_locked) {
+        return reply.status(403).send({
+          error: "NameLocked",
+          message: "Le nom de l'établissement est verrouillé. Contactez le support pour le modifier.",
+        });
       }
+
+      updateData.name = incomingName;
+      updateData.slug = await buildUniqueBusinessSlug(incomingName, current.id);
+      updateData.name_locked = true; // verrouiller dès la 1ère sauvegarde réelle
+    } else if (regenerate_slug) {
+      // Régénérer le slug depuis le nom actuel sans changer le nom
+      updateData.slug = await buildUniqueBusinessSlug(current.name, current.id);
     }
 
     const updated = await prisma.business.update({
@@ -414,6 +428,44 @@ export async function businessRoutes(app: FastifyInstance) {
     });
 
     return reply.send(programs);
+  });
+
+  // PATCH /business/programs/:id/design — design uniquement, sans versioning
+  // Mise à jour des champs visuels (couleur fond, texte) sans créer de nouvelle version.
+  app.patch("/programs/:id/design", async (request, reply) => {
+    const params = ProgramIdParams.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ error: "ValidationError", message: "ID invalide" });
+    }
+
+    const body = z.object({
+      background_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      text_color: z.enum(["light", "dark"]).optional(),
+    }).safeParse(request.body);
+
+    if (!body.success) {
+      return reply.status(400).send({ error: "ValidationError", message: body.error.message });
+    }
+
+    const program = await prisma.program.findFirst({
+      where: { id: params.data.id, business_id: request.user.business_id, status: "ACTIVE" },
+    });
+
+    if (!program) {
+      return reply.status(404).send({ error: "NotFound", message: "Programme actif non trouvé" });
+    }
+
+    const updated = await prisma.program.update({
+      where: { id: program.id },
+      data: {
+        config_json: {
+          ...((program.config_json as object) ?? {}),
+          ...body.data,
+        },
+      },
+    });
+
+    return reply.send(updated);
   });
 
   // PATCH /business/programs/:id

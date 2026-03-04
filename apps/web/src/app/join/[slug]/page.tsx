@@ -16,6 +16,8 @@ interface JoinProgram {
   type: "STAMPS" | "POINTS";
   threshold: number;
   reward_label: string;
+  background_color: string | null;
+  text_color: "light" | "dark";
 }
 
 interface BusinessInfo {
@@ -44,11 +46,35 @@ export default function JoinPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
+  const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Validation côté client pour activer le bouton
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const phoneDigits = phone.replace(/\D/g, "");
+  const phoneValid  = phoneDigits.length === 10;
+  const isFormValid =
+    firstName.trim().length >= 1 &&
+    lastName.trim().length >= 1 &&
+    emailValid &&
+    phoneValid &&
+    consent;
+
+  const hasPresetProgram = Boolean(presetProgramId);
+
+  const visiblePrograms = useMemo(() => {
+    if (!business) return [];
+    if (!hasPresetProgram || !selectedProgramId) return business.programs ?? [];
+    return (business.programs ?? []).filter((p) => p.id === selectedProgramId);
+  }, [business, hasPresetProgram, selectedProgramId]);
+
   useEffect(() => {
-    fetch(`${API_URL}/api/v1/join/${slug}`)
+    const joinUrl = presetProgramId
+      ? `${API_URL}/api/v1/join/${slug}?program_id=${encodeURIComponent(presetProgramId)}`
+      : `${API_URL}/api/v1/join/${slug}`;
+
+    fetch(joinUrl)
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
       .then((data: BusinessInfo) => {
         setBusiness(data);
@@ -67,6 +93,11 @@ export default function JoinPage() {
     return business.programs.find((p) => p.id === selectedProgramId) ?? null;
   }, [business, selectedProgramId]);
 
+  // Couleurs de marque du programme sélectionné
+  const brandColor  = selectedProgram?.background_color ?? "#2563eb"; // blue-600 par défaut
+  const isDarkText  = selectedProgram?.text_color === "dark";
+  const textOnBrand = isDarkText ? "#111827" : "#ffffff";
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -80,7 +111,7 @@ export default function JoinPage() {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
           email: email.trim(),
-          ...(phone.trim() && { phone: phone.trim() }),
+          phone: phone.trim(),
           ...(selectedProgramId && { program_id: selectedProgramId }),
         }),
       });
@@ -142,7 +173,16 @@ export default function JoinPage() {
             <p className="text-sm text-gray-500 mt-1">Creez votre carte fidelite gratuite</p>
           </div>
 
-          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-800">
+          <div
+            className="rounded-xl px-4 py-3 text-sm font-medium"
+            style={{
+              backgroundColor: brandColor + "22", // ~13% opacité
+              borderWidth: 1,
+              borderStyle: "solid",
+              borderColor: brandColor + "55",     // ~33% opacité
+              color: brandColor,
+            }}
+          >
             <span className="font-semibold">{selectedProgram?.threshold ?? business.threshold} tampons</span>
             <span> = </span>
             <span>{selectedProgram?.reward_label ?? business.reward_label}</span>
@@ -151,7 +191,7 @@ export default function JoinPage() {
 
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {(business.programs?.length ?? 0) > 1 && (
+            {!hasPresetProgram && (business.programs?.length ?? 0) > 1 && (
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Programme de fidelite *</label>
                 <select
@@ -160,7 +200,7 @@ export default function JoinPage() {
                   className={inputClass}
                   required
                 >
-                  {business.programs.map((p) => (
+                  {visiblePrograms.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} - {p.threshold} tampons = {p.reward_label}
                     </option>
@@ -214,17 +254,41 @@ export default function JoinPage() {
 
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Telephone <span className="text-gray-400 font-normal">(optionnel)</span>
+                Telephone *
               </label>
               <input
                 type="tel"
                 placeholder="06 12 34 56 78"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className={inputClass}
+                onChange={(e) => {
+                  // Autoriser uniquement chiffres et espaces, max 10 chiffres
+                  const raw = e.target.value.replace(/[^\d\s]/g, "");
+                  const digits = raw.replace(/\s/g, "");
+                  if (digits.length <= 10) setPhone(raw);
+                }}
+                className={`${inputClass} ${phone && !phoneValid ? "border-red-400 focus:ring-red-400" : ""}`}
                 autoComplete="tel"
+                inputMode="tel"
               />
+              {phone && !phoneValid && (
+                <p className="text-xs text-red-500 mt-1">Numéro invalide — 10 chiffres requis.</p>
+              )}
             </div>
+
+            {/* Case RGPD */}
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+              />
+              <span className="text-xs text-gray-500 leading-relaxed">
+                J'accepte que mes données (nom, email, téléphone) soient conservées
+                par <strong>{business.name}</strong> pour gérer ma carte fidélité.
+                Elles ne seront jamais partagées à des tiers.
+              </span>
+            </label>
 
             {error && (
               <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">
@@ -234,17 +298,13 @@ export default function JoinPage() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm"
+              disabled={!isFormValid || loading}
+              className="w-full py-3 px-4 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-opacity text-sm"
+              style={{ backgroundColor: brandColor, color: textOnBrand }}
             >
-              {loading ? "Creation de votre carte..." : "Obtenir ma carte fidelite ->"}
+              {loading ? "Création de votre carte..." : "Obtenir ma carte fidélité →"}
             </button>
           </form>
-
-          <p className="text-xs text-center text-gray-400">
-            Vos donnees sont utilisees uniquement par {business.name}.
-            <br />Aucun spam, aucune revente.
-          </p>
         </div>
       </div>
     </div>

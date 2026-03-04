@@ -15,9 +15,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle, Circle, Store, Star, Palette, MapPin, Phone, QrCode, Copy, Check, Upload, Trash2, Search, ArrowRight, Stamp } from "lucide-react";
+import { CheckCircle, Circle, Store, Star, Palette, MapPin, Phone, QrCode, Copy, Check, Upload, Trash2, Search, ArrowRight, Stamp, Lock } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api-client";
 
@@ -42,6 +43,7 @@ interface Business {
   slug: string;
   logo_url: string | null;
   plan: "STARTER" | "PRO" | "BUSINESS";
+  name_locked: boolean;
   settings_json: {
     establishment_type?: string;
     address?: string;
@@ -157,12 +159,15 @@ export default function BusinessPage() {
         }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         setError1(data.message ?? "Erreur lors de la sauvegarde.");
         return;
       }
 
+      // Mettre à jour le business (inclut le nouveau slug si le nom a changé)
+      setBusiness((b) => b ? { ...b, ...data } : data);
       setSavedSnap({ name: name.trim(), type, address: address.trim(), phone: phone.trim() });
       setSaved1(true);
       setTimeout(() => setSaved1(false), 3000);
@@ -178,6 +183,8 @@ export default function BusinessPage() {
   const [gmbLoading, setGmbLoading]           = useState(false);
   const [gmbOpen, setGmbOpen]                 = useState(false);
   const [gmbImported, setGmbImported]         = useState(false);
+  const [gmbPhotos, setGmbPhotos]             = useState<string[]>([]);
+  const [showPhotoModal, setShowPhotoModal]   = useState(false);
   const gmbTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleGmbInput(value: string) {
@@ -205,14 +212,19 @@ export default function BusinessPage() {
     setGmbLoading(true);
     try {
       const details = await apiClient.get<{
-        name?: string; address?: string; phone?: string; type?: string;
+        name?: string; address?: string; phone?: string; type?: string; photo_urls?: string[];
       }>(`/business/places/details?place_id=${placeId}`);
 
       // Remplir le formulaire avec les données Google
-      if (details.name)    setName(details.name);
-      if (details.address) setAddress(details.address);
-      if (details.phone)   setPhone(details.phone);
-      if (details.type)    setType(details.type);
+      if (details.name)       setName(details.name);
+      if (details.address)    setAddress(details.address);
+      if (details.phone)      setPhone(details.phone);
+      if (details.type)       setType(details.type);
+      const photos = details.photo_urls ?? [];
+      if (photos.length > 0) {
+        setGmbPhotos(photos);
+        setShowPhotoModal(true);
+      }
 
       setGmbOpen(false);
       setGmbImported(true);
@@ -221,9 +233,38 @@ export default function BusinessPage() {
     }
   }
 
+  async function applyGmbPhoto(url: string) {
+    try {
+      await apiClient.patch("/business", { logo_url: url });
+      setBusiness((b) => b ? { ...b, logo_url: url } : b);
+      setShowPhotoModal(false);
+      setGmbPhotos([]);
+    } catch {
+      // silencieux
+    }
+  }
+
+  // ── Régénérer le slug depuis le nom actuel ──────────────────────────────────
+  async function regenerateSlug() {
+    const token = localStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_URL}/api/v1/business`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ regenerate_slug: true }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setBusiness((b) => b ? { ...b, ...data } : data);
+    } catch {
+      // silencieux
+    }
+  }
+
   // ── Détection de changements dans le formulaire général ─────────────────────
+  const nameLocked = business?.name_locked ?? false;
   const isDirty =
-    name.trim()    !== savedSnap.name    ||
+    (!nameLocked && name.trim() !== savedSnap.name) ||
     type           !== savedSnap.type    ||
     address.trim() !== savedSnap.address ||
     phone.trim()   !== savedSnap.phone;
@@ -310,32 +351,42 @@ export default function BusinessPage() {
                   minLength={2}
                   placeholder="Ex : Salon Élégance"
                   value={name}
-                  onChange={(e) => {
+                  readOnly={nameLocked}
+                  onChange={nameLocked ? undefined : (e) => {
                     setName(e.target.value);
                     setGmbOpen(true);
                     handleGmbInput(e.target.value);
                   }}
-                  onFocus={() => { if (name.trim().length >= 2) setGmbOpen(true); }}
-                  onBlur={() => setTimeout(() => setGmbOpen(false), 150)}
-                  className={inputClass}
+                  onFocus={nameLocked ? undefined : () => { if (name.trim().length >= 2) setGmbOpen(true); }}
+                  onBlur={nameLocked ? undefined : () => setTimeout(() => setGmbOpen(false), 150)}
+                  className={`${inputClass} ${nameLocked ? "bg-gray-50 cursor-not-allowed pr-9" : ""}`}
                 />
-                {gmbLoading && (
+                {nameLocked ? (
+                  <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                ) : gmbLoading ? (
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                )}
+                ) : null}
               </div>
-              <div className="mt-1.5 flex items-center gap-1">
-                <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" aria-hidden="true">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                <span className="text-xs text-gray-400">Suggestions Google My Business</span>
-              </div>
+              {nameLocked ? (
+                <p className="mt-1 text-xs text-gray-400 flex items-center gap-1">
+                  <Lock className="h-3 w-3" />
+                  Nom verrouillé — contactez le support pour le modifier.
+                </p>
+              ) : (
+                <div className="mt-1.5 flex items-center gap-1">
+                  <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" aria-hidden="true">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  <span className="text-xs text-gray-400">Suggestions Google My Business</span>
+                </div>
+              )}
             </Field>
 
-            {/* Dropdown résultats */}
-            {gmbOpen && gmbResults.length > 0 && (
+            {/* Dropdown résultats (masqué si nom verrouillé) */}
+            {!nameLocked && gmbOpen && gmbResults.length > 0 && (
               <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                 {gmbResults.map((r) => (
                   <button
@@ -355,10 +406,21 @@ export default function BusinessPage() {
             )}
 
             {/* Confirmation import */}
-            {gmbImported && (
+            {!nameLocked && gmbImported && (
               <div className="flex items-center gap-2 mt-2 text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
                 <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                Données importées depuis Google — vérifiez et enregistrez.
+                <span>
+                  Données importées depuis Google — vérifiez et enregistrez.
+                  {gmbPhotos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPhotoModal(true)}
+                      className="ml-1 underline hover:text-green-900"
+                    >
+                      Voir les {gmbPhotos.length} photo{gmbPhotos.length > 1 ? "s" : ""} →
+                    </button>
+                  )}
+                </span>
               </div>
             )}
           </div>
@@ -456,15 +518,32 @@ export default function BusinessPage() {
       </div>{/* fin grille 2 colonnes */}
 
       {/* ── Section 3 : QR Code d'inscription ── */}
-      {business?.slug && <QrRegistrationSection slug={business.slug} />}
+      {business?.slug && (
+        <QrRegistrationSection
+          slug={business.slug}
+          businessName={business.name}
+          onRegenerate={regenerateSlug}
+        />
+      )}
 
       {/* ── Section 4 : Apparence ── */}
       <Section id="section-appearance" title="Apparence" icon={Palette} highlighted={highlightedSection === "section-appearance"}>
         <LogoUploadSection
           currentLogoUrl={business?.logo_url ?? null}
-          onUploaded={(url) => setBusiness((b) => b ? { ...b, logo_url: url } : b)}
+          onUploaded={(url) => {
+            setBusiness((b) => b ? { ...b, logo_url: url } : b);
+          }}
         />
       </Section>
+
+      {/* ── Modale sélection photo Google ── */}
+      {showPhotoModal && (
+        <GmbPhotoModal
+          photos={gmbPhotos}
+          onSelect={applyGmbPhoto}
+          onClose={() => setShowPhotoModal(false)}
+        />
+      )}
 
     </div>
   );
@@ -564,7 +643,7 @@ function LogoUploadSection({
   onUploaded: (url: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview]   = useState<string | null>(currentLogoUrl);
+  const [preview, setPreview]     = useState<string | null>(currentLogoUrl);
   const [uploading, setUploading] = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [success, setSuccess]     = useState(false);
@@ -717,11 +796,124 @@ function LogoUploadSection({
   );
 }
 
+// ─── Modale sélection photo Google ───────────────────────────────────────────
+
+function GmbPhotoModal({
+  photos,
+  onSelect,
+  onClose,
+}: {
+  photos: string[];
+  onSelect: (url: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [applying, setApplying] = useState<string | null>(null);
+
+  async function handleSelect(url: string) {
+    setApplying(url);
+    await onSelect(url);
+    setApplying(null);
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+        {/* En-tête */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-gray-900">Photos de votre établissement</h3>
+            <p className="text-xs text-gray-400">Choisissez une photo à utiliser comme visuel de votre carte fidélité</p>
+          </div>
+        </div>
+
+        {/* Grille de photos */}
+        <div className="p-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {photos.map((url, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => handleSelect(url)}
+                disabled={applying !== null}
+                className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 hover:border-blue-400 hover:scale-[1.02] transition-all disabled:opacity-60 group"
+              >
+                <img
+                  src={url}
+                  alt={`Photo ${i + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                {/* Overlay au hover */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                  <span className="opacity-0 group-hover:opacity-100 text-white text-xs font-semibold bg-black/50 px-2 py-1 rounded-full transition-opacity">
+                    Choisir
+                  </span>
+                </div>
+                {/* Spinner si en cours d'application */}
+                {applying === url && (
+                  <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                    <div className="h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Pied de modale */}
+        <div className="px-6 pb-5 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="py-2 px-4 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Ignorer
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── QR Code d'inscription ────────────────────────────────────────────────────
 
-function QrRegistrationSection({ slug }: { slug: string }) {
+function QrRegistrationSection({
+  slug,
+  businessName,
+  onRegenerate,
+}: {
+  slug: string;
+  businessName: string;
+  onRegenerate: () => Promise<void>;
+}) {
   const registrationUrl = `${APP_URL}/join/${slug}`;
   const [copied, setCopied] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerated, setRegenerated] = useState(false);
+
+  // Détecte si le slug semble issu du nom actuel
+  function slugMatchesName(s: string, n: string) {
+    const expected = n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return s === expected || s.startsWith(expected + "-");
+  }
+  const isStale = businessName && !slugMatchesName(slug, businessName);
+
+  async function handleRegenerate() {
+    setRegenerating(true);
+    await onRegenerate();
+    setRegenerating(false);
+    setRegenerated(true);
+    setTimeout(() => setRegenerated(false), 3000);
+  }
 
   function copyLink() {
     navigator.clipboard.writeText(registrationUrl).then(() => {
@@ -786,6 +978,34 @@ function QrRegistrationSection({ slug }: { slug: string }) {
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
+
+          {/* Alerte slug obsolète */}
+          {isStale && (
+            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+              <div className="flex-1">
+                <p className="text-xs font-medium text-amber-800">
+                  Le lien ne correspond plus au nom de l'établissement.
+                </p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  Attendu : <span className="font-mono">/join/{businessName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}</span>
+                </p>
+              </div>
+              <button
+                onClick={handleRegenerate}
+                disabled={regenerating}
+                className="shrink-0 py-1.5 px-3 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
+              >
+                {regenerating ? "…" : regenerated ? "Mis à jour ✓" : "Régénérer"}
+              </button>
+            </div>
+          )}
+
+          {/* Confirmation si pas stale mais vient d'être régénéré */}
+          {!isStale && regenerated && (
+            <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              Lien mis à jour depuis le nom de l'établissement ✓
+            </p>
+          )}
 
           {/* Actions */}
           <div className="flex flex-wrap gap-3">

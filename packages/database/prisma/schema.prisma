@@ -101,12 +101,13 @@ model User {
 // settings_json stocke des config flexibles (couleurs, heures d'ouverture…).
 // ─────────────────────────────────────────────────────────────────────────────
 model Business {
-  id           String  @id @default(cuid())
-  name         String
-  slug         String  @unique // ex. "salon-marie-paris" — utilisé dans les URLs
-  logo_url     String? // URL R2 du logo nettoyé
-  settings_json Json   @default("{}") // config libre (couleurs, textes wallet…)
-  plan          Plan   @default(STARTER) // plan d'abonnement actif
+  id            String  @id @default(cuid())
+  name          String
+  slug          String  @unique // ex. "salon-marie-paris" — utilisé dans les URLs
+  logo_url      String? // URL R2 du logo nettoyé
+  settings_json Json    @default("{}") // config libre (couleurs, textes wallet…)
+  plan          Plan    @default(STARTER) // plan d'abonnement actif
+  name_locked   Boolean @default(false)  // verrouillé après la 1ère sauvegarde du nom réel
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
