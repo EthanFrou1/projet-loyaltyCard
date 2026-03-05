@@ -51,9 +51,39 @@ async function request<T = unknown>(
   return res.json() as Promise<T>;
 }
 
+// Envoi d'un FormData (upload fichier) — sans Content-Type, le navigateur gère le boundary
+async function requestForm<T = unknown>(path: string, form: FormData): Promise<T> {
+  const token = getToken();
+
+  const res = await fetch(`${API_URL}${API_PREFIX}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+
+  if (res.status === 401) {
+    const isAuthPage = typeof window !== "undefined" &&
+      (window.location.pathname.startsWith("/login") || window.location.pathname.startsWith("/setup"));
+    if (!isAuthPage && typeof window !== "undefined") {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      window.location.href = "/login";
+    }
+    throw new Error("Session expirée, veuillez vous reconnecter.");
+  }
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(error.message ?? `HTTP ${res.status}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
 export const apiClient = {
   get: <T = unknown>(path: string) => request<T>("GET", path),
   post: <T = unknown>(path: string, body: unknown) => request<T>("POST", path, body),
   patch: <T = unknown>(path: string, body: unknown) => request<T>("PATCH", path, body),
   delete: <T = unknown>(path: string) => request<T>("DELETE", path),
+  postForm: <T = unknown>(path: string, form: FormData) => requestForm<T>(path, form),
 };

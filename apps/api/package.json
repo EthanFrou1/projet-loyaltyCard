@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "dotenv -e ../../.env -- tsx watch src/index.ts",
+    "worker": "dotenv -e ../../.env -- tsx watch src/workers/ai.worker.ts",
     "build": "tsc",
     "start": "dotenv -e ../../.env -- node dist/index.js",
     "typecheck": "tsc --noEmit"

@@ -21,7 +21,7 @@ import { prisma } from "@loyalty/database";
 import { getRedisConnection } from "../lib/queue.js";
 import { AiService } from "../services/ai.service.js";
 import { StorageService } from "../lib/storage.js";
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 
 const openai = new OpenAI({ apiKey: process.env["OPENAI_API_KEY"] });
 const storageService = new StorageService();
@@ -105,20 +105,45 @@ async function cleanLogo(
   businessId: string,
   jobId: string
 ) {
-  const prompt = `Clean this logo: remove background, make it transparent, upscale if small. ${payload["instructions"] ?? ""}`;
+  // 1. Télécharger le logo source depuis l'URL fournie
+  const sourceUrl = payload["source_url"] as string;
+  const sourceRes = await fetch(sourceUrl);
+  if (!sourceRes.ok) throw new Error(`Impossible de télécharger le logo source : ${sourceUrl}`);
 
-  const response = await openai.images.generate({
-    model: "dall-e-3",
+  const sourceBuffer = Buffer.from(await sourceRes.arrayBuffer());
+  const sourceContentType = sourceRes.headers.get("content-type") ?? "image/png";
+
+  // 2. Préparer le fichier pour l'API OpenAI
+  const imageFile = await toFile(sourceBuffer, "logo.png", { type: sourceContentType });
+
+  const instructions = payload["instructions"] ? ` ${payload["instructions"]}` : "";
+  const prompt = `Remove the background completely and isolate the logo subject on a transparent background. Preserve all logo colors and shapes exactly.${instructions}`;
+
+  // 3. Appel gpt-image-1 en mode édition (edit = image en entrée, pas juste du texte)
+  const response = await openai.images.edit({
+    model: "gpt-image-1",
+    image: imageFile,
     prompt,
     n: 1,
     size: "1024x1024",
-    quality: "standard",
   });
 
-  const imageUrl = response.data[0]?.url;
-  if (!imageUrl) throw new Error("OpenAI n'a pas retourné d'image");
+  // 4. Récupérer l'image — gpt-image-1 retourne du base64
+  const imageData = response.data[0];
+  if (!imageData) throw new Error("OpenAI n'a pas retourné d'image");
 
-  const storageUrl = await storageService.uploadFromUrl(imageUrl, `ai/${businessId}/logo_cleaned.png`);
+  let imageBuffer: Buffer;
+  if (imageData.b64_json) {
+    imageBuffer = Buffer.from(imageData.b64_json, "base64");
+  } else if (imageData.url) {
+    const res = await fetch(imageData.url);
+    imageBuffer = Buffer.from(await res.arrayBuffer());
+  } else {
+    throw new Error("Format de réponse OpenAI non reconnu");
+  }
+
+  // 5. Upload sur R2 et enregistrement
+  const storageUrl = await storageService.upload(imageBuffer, `ai/${businessId}/logo_cleaned.png`, "image/png");
 
   await prisma.aiAsset.create({
     data: { business_id: businessId, job_id: jobId, kind: "logo_cleaned", storage_url: storageUrl },
@@ -144,6 +169,7 @@ async function generatePassDesign(
       n: 1,
       size: "1024x1024",
       quality: "standard",
+      response_format: "url",
     });
 
     const imageUrl = response.data[0]?.url;
@@ -181,6 +207,7 @@ async function generatePromoAssets(
       n: 1,
       size: "1024x1024",
       quality: "standard",
+      response_format: "url",
     });
 
     const imageUrl = response.data[0]?.url;

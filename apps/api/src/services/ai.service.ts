@@ -132,6 +132,29 @@ export class AiService {
   }
 
   /**
+   * Retourne les 20 derniers jobs IA du business (pour l'historique).
+   */
+  async listJobs(businessId: string) {
+    const jobs = await prisma.aiJob.findMany({
+      where: { business_id: businessId },
+      orderBy: { created_at: "desc" },
+      take: 20,
+      include: { ai_assets: true },
+    });
+
+    return jobs.map((job) => ({
+      id: job.id,
+      type: job.type,
+      status: job.status,
+      assets: job.ai_assets.map((a) => ({ kind: a.kind, url: a.storage_url })),
+      error_message: job.error_message,
+      cost_estimate: job.cost_estimate,
+      created_at: job.created_at.toISOString(),
+      completed_at: job.completed_at?.toISOString() ?? null,
+    }));
+  }
+
+  /**
    * Incrémente le compteur de générations IA (appelé par le worker après succès).
    */
   async incrementUsage(businessId: string, count = 1) {
