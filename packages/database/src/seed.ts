@@ -53,11 +53,12 @@ async function main() {
   console.log(`✓ Utilisateur admin créé : ${user.email}`);
 
   // ── Programme fidélité STAMPS ─────────────────────────────────────────────
-  const program = await prisma.program.upsert({
-    where: { id: "program-stamps-demo" },
-    update: {},
-    create: {
-      id: "program-stamps-demo",
+  // On prend le premier programme actif du business (MVP = 1 programme par business)
+  const existingProgram = await prisma.program.findFirst({
+    where: { business_id: business.id, status: "ACTIVE" },
+  });
+  const program = existingProgram ?? await prisma.program.create({
+    data: {
       business_id: business.id,
       name: "Carte fidélité — 10 tampons",
       type: "STAMPS",
@@ -65,11 +66,11 @@ async function main() {
         threshold: 10,
         reward_label: "10€ de réduction sur votre prochaine visite",
       },
-      active: true,
+      status: "ACTIVE",
     },
   });
 
-  console.log(`✓ Programme créé : ${program.name}`);
+  console.log(`✓ Programme : ${program.name} (id: ${program.id})`);
 
   console.log("\n✅ Seed terminé !\n");
   console.log("─────────────────────────────────────────");

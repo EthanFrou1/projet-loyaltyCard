@@ -89,7 +89,7 @@ const CreateProgramBody = z.object({
 });
 
 const ProgramIdParams = z.object({
-  id: z.string().cuid(),
+  id: z.string().min(1),
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────

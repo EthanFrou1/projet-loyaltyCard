@@ -10,6 +10,19 @@ import { prisma } from "@loyalty/database";
 import { PKPass } from "passkit-generator";
 import { StorageService } from "../lib/storage.js";
 
+type ProgramConfig = {
+  threshold?: number;
+  reward_label?: string;
+  background_color?: string;
+  text_color?: "light" | "dark";
+};
+
+function hexToAppleRgb(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return "rgb(26, 115, 232)";
+  return `rgb(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)})`;
+}
+
 interface RegisterDeviceInput {
   deviceLibraryId: string;
   serial: string;
@@ -55,10 +68,22 @@ export class AppleWalletService {
   async createPass(businessId: string, customerId: string) {
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, business_id: businessId },
-      include: { business: true },
+      include: { business: true, program: true },
     });
 
     if (!customer) throw new Error("Client non trouvé");
+
+    // Paramètres du programme fidélité
+    const cfg = (customer.program?.config_json ?? {}) as ProgramConfig;
+    const threshold = cfg.threshold ?? 10;
+    const rewardLabel = cfg.reward_label ?? "Récompense";
+    const programName = customer.program?.name ?? "Carte fidélité";
+    const bgColor = cfg.background_color
+      ? hexToAppleRgb(cfg.background_color)
+      : "rgb(26, 26, 46)";
+    const isDark = cfg.text_color === "dark";
+    const fgColor = isDark ? "rgb(20, 20, 20)" : "rgb(255, 255, 255)";
+    const labelColor = isDark ? "rgb(100, 100, 100)" : "rgb(210, 230, 255)";
 
     const serial = `loyalty-${customerId}`;
     const authToken = this.generateAuthToken(serial);
@@ -67,14 +92,14 @@ export class AppleWalletService {
     const pass = new PKPass({}, certificates, {
       formatVersion: 1,
       serialNumber: serial,
-      description: `Carte fidélité ${customer.business.name}`,
+      description: programName,
       organizationName: customer.business.name,
       passTypeIdentifier: this.passTypeId,
       teamIdentifier: this.teamId,
       logoText: customer.business.name,
-      backgroundColor: "rgb(26, 115, 232)",
-      foregroundColor: "rgb(255, 255, 255)",
-      labelColor: "rgb(235, 245, 255)",
+      backgroundColor: bgColor,
+      foregroundColor: fgColor,
+      labelColor: labelColor,
       ...(this.webServiceUrl.startsWith("https://")
         ? {
             webServiceURL: this.webServiceUrl,
@@ -85,28 +110,47 @@ export class AppleWalletService {
 
     pass.type = "storeCard";
 
+    // Header: compteur de tampons (haut droite, compact)
+    pass.headerFields.push({
+      key: "stamps_header",
+      label: "TAMPONS",
+      value: `${customer.stamp_count} / ${threshold}`,
+    });
+
+    // Primary: représentation visuelle des tampons (gros)
+    const filled = "●".repeat(Math.min(customer.stamp_count, threshold));
+    const empty  = "○".repeat(Math.max(0, threshold - customer.stamp_count));
     pass.primaryFields.push({
-      key: "stamps",
-      label: "Tampons",
-      value: customer.stamp_count,
+      key: "stamps_visual",
+      label: "",
+      value: `${filled}${empty}`,
     });
 
+    // Secondary: nom du programme (sans libellé)
     pass.secondaryFields.push({
-      key: "customer_name",
-      label: "Client",
-      value: customer.name,
+      key: "program",
+      label: "",
+      value: programName,
     });
 
+    // Auxiliary: récompense
     pass.auxiliaryFields.push({
-      key: "customer_id",
-      label: "ID",
-      value: customer.id,
+      key: "reward",
+      label: "RÉCOMPENSE",
+      value: rewardLabel,
+    });
+
+    // Dos de la carte : détails complets
+    pass.backFields.push({
+      key: "reward_back",
+      label: "Récompense",
+      value: rewardLabel,
     });
 
     pass.backFields.push({
-      key: "reward",
-      label: "Récompense",
-      value: "Voir programme en boutique",
+      key: "program_back",
+      label: "Programme",
+      value: programName,
     });
 
     pass.backFields.push({
@@ -162,36 +206,23 @@ export class AppleWalletService {
    * Télécharge le .pkpass d'un client (par customer ID).
    */
   async downloadPass(customerId: string): Promise<Buffer | null> {
-    let pass = await prisma.walletPass.findFirst({
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { business_id: true },
+    });
+    if (!customer) return null;
+
+    // Toujours regénérer pour avoir le design et les données à jour
+    await this.createPass(customer.business_id, customerId);
+
+    const pass = await prisma.walletPass.findFirst({
       where: { customer_id: customerId, platform: "APPLE" },
       select: { business_id: true, customer_id: true, serial: true },
     });
-
-    if (!pass) {
-      const customer = await prisma.customer.findUnique({
-        where: { id: customerId },
-        select: { business_id: true },
-      });
-      if (!customer) return null;
-
-      await this.createPass(customer.business_id, customerId);
-      pass = await prisma.walletPass.findFirst({
-        where: { customer_id: customerId, platform: "APPLE" },
-        select: { business_id: true, customer_id: true, serial: true },
-      });
-    }
-
     if (!pass) return null;
 
     const storageKey = this.getStorageKey(pass.business_id, pass.customer_id, pass.serial);
-    let buffer = await this.storage.download(storageKey);
-
-    if (!buffer) {
-      await this.createPass(pass.business_id, pass.customer_id);
-      buffer = await this.storage.download(storageKey);
-    }
-
-    return buffer;
+    return this.storage.download(storageKey);
   }
 
   /**

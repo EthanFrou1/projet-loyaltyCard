@@ -48,9 +48,10 @@ export default function SetupPage() {
 
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
+      // Signal pour afficher la modale d'onboarding au 1er accès au dashboard
+      localStorage.setItem("show_onboarding", "1");
 
-      // Rediriger vers l'onboarding pour configurer le salon
-      router.push("/onboarding");
+      router.push("/dashboard");
     } catch {
       setError("Impossible de contacter l'API (localhost:3001)");
     } finally {

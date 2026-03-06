@@ -15,7 +15,7 @@ const SlugParams = z.object({
 });
 
 const JoinQuery = z.object({
-  program_id: z.string().cuid().optional(),
+  program_id: z.string().min(1).optional(),
 });
 
 const RegisterBody = z.object({
@@ -23,7 +23,7 @@ const RegisterBody = z.object({
   last_name: z.string().min(1).max(50),
   email: z.string().email(),
   phone: z.string().regex(/^\+?[\d\s\-()]{6,20}$/).optional(),
-  program_id: z.string().cuid().optional(),
+  program_id: z.string().min(1).optional(),
 });
 
 type ProgramConfig = {

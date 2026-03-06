@@ -78,7 +78,12 @@ export async function authRoutes(app: FastifyInstance) {
           business_id: business.id,
           name: "Carte fidélité",
           type: "STAMPS",
-          config_json: { threshold: 10, reward_label: "10€ de réduction" },
+          config_json: {
+            threshold: 10,
+            reward_label: "10€ de réduction",
+            background_color: "#1a1a2e",
+            text_color: "light",
+          },
           status: "ACTIVE",
           version: 1,
         },
