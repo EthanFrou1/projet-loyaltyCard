@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -12,12 +13,17 @@ import {
   Store,
   CreditCard,
   Stamp,
+  ScanLine,
   X,
   Plus,
   UserPlus,
   QrCode,
   Upload,
+  Search,
+  CheckCircle,
 } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
+import { mutate as swrMutate } from "swr";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -32,6 +38,7 @@ const ESTABLISHMENT_TYPES = [
   { value: "boutique",        label: "Boutique / Commerce" },
   { value: "autre",           label: "Autre" },
 ];
+const STAMP_THRESHOLD_OPTIONS = Array.from({ length: 8 }, (_, i) => String(i + 8));
 
 const SETUP_COLORS = [
   "#1a1a2e", "#1e3a5f", "#1a3a2a", "#2d1b4e",
@@ -42,6 +49,7 @@ const navItems = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/customers", label: "Clients", icon: Users, exact: false },
   { href: "/dashboard/programs", label: "Programmes", icon: Stamp, exact: false },
+  { href: "/dashboard/scan", label: "Scan", icon: ScanLine, exact: false },
   { href: "/dashboard/ai", label: "Outils IA", icon: Sparkles, exact: false },
   { href: "/dashboard/business", label: "Mon établissement", icon: Store, exact: false },
   { href: "/dashboard/billing", label: "Abonnement", icon: CreditCard, exact: false },
@@ -68,16 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<UserProfile | null>(null);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const onboardingChecked = useRef(false);
-
-  useEffect(() => {
-    if (onboardingChecked.current) return;
-    onboardingChecked.current = true;
-    if (localStorage.getItem("show_onboarding") === "1") {
-      localStorage.removeItem("show_onboarding");
-      setShowOnboarding(true);
-    }
-  }, []);
+  const isOwner = user?.role === "OWNER" || user?.role === "ADMIN";
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -86,12 +85,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
+    // Charger le profil utilisateur
     fetch(`${API_URL}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setUser(data); })
+      .catch(() => {});
+
+    // Vérifier si l'onboarding est nécessaire : nom par défaut OU aucun programme
+    fetch(`${API_URL}/api/v1/business`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data) setUser(data);
+        if (!data) return;
+        const nameNotSet = !data.name || data.name.trim() === "";
+        const noPrograms = !data.programs || data.programs.length === 0;
+        if (nameNotSet || noPrograms) setShowOnboarding(true);
       })
       .catch(() => {});
   }, [router]);
@@ -111,7 +122,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push(`/dashboard?focus=qr&tick=${Date.now()}`);
   }
 
-  const primaryMobileNav = navItems.slice(0, 5);
+  const visibleNavItems = navItems.filter((item) => {
+    if (isOwner) return true;
+    return !["/dashboard/business", "/dashboard/billing"].includes(item.href);
+  });
+  const primaryMobileNav = visibleNavItems.slice(0, 5);
   const currentPlanStyle = user?.business?.plan
     ? (planStyles[user.business.plan] ?? fallbackPlanStyle)
     : fallbackPlanStyle;
@@ -127,7 +142,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = item.exact
               ? pathname === item.href
@@ -194,7 +209,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <main className="flex-1 overflow-auto pb-24 lg:pb-8">
         <div className="px-4 pt-0 sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
-          {children}
+          <Suspense>
+            {children}
+          </Suspense>
         </div>
       </main>
 
@@ -233,6 +250,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <QrCode className="h-4 w-4 text-blue-600" />
               QR d'inscription
             </button>
+            <Link
+              href="/dashboard/scan"
+              onClick={() => setQuickActionsOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <ScanLine className="h-4 w-4 text-blue-600" />
+              Scanner client
+            </Link>
             <Link
               href="/dashboard/business"
               onClick={() => setQuickActionsOpen(false)}
@@ -307,18 +332,31 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [programId, setProgramId] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const gmbTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Étape 1 — établissement
   const [bizName, setBizName] = useState("");
   const [bizType, setBizType] = useState("salon_coiffure");
+  const [bizAddress, setBizAddress] = useState("");
+  const [bizPhone, setBizPhone] = useState("");
+  const [bizPlaceId, setBizPlaceId] = useState<string | null>(null);
+  const [gmbResults, setGmbResults] = useState<Array<{ place_id: string; name: string; address: string; type: string }>>([]);
+  const [gmbLoading, setGmbLoading] = useState(false);
+  const [gmbOpen, setGmbOpen] = useState(false);
+  const [gmbImported, setGmbImported] = useState(false);
 
   // Étape 2 — logo
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [gmbPhotos, setGmbPhotos] = useState<string[]>([]);
+  const [applyingPhoto, setApplyingPhoto] = useState<string | null>(null);
 
   // Étape 3 — programme
   const [threshold, setThreshold] = useState("10");
   const [reward, setReward] = useState("10€ de réduction");
+  const thresholdOptions = STAMP_THRESHOLD_OPTIONS.includes(threshold)
+    ? STAMP_THRESHOLD_OPTIONS
+    : [threshold, ...STAMP_THRESHOLD_OPTIONS];
 
   // Étape 4 — design
   const [bgColor, setBgColor] = useState("#1a1a2e");
@@ -332,12 +370,16 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
-        if (data.name && data.name !== "Mon établissement") setBizName(data.name);
+        if (data.name) setBizName(data.name);
+        const s = data.settings_json ?? {};
+        if (s.establishment_type) setBizType(s.establishment_type);
+        if (s.address)            setBizAddress(s.address);
+        if (s.phone)              setBizPhone(s.phone);
         const prog = data.programs?.[0];
         if (prog) {
           setProgramId(prog.id);
           const cfg = prog.config_json ?? {};
-          if (cfg.threshold)        setThreshold(String(cfg.threshold));
+          if (cfg.threshold) setThreshold(String(cfg.threshold));
           if (cfg.reward_label)     setReward(cfg.reward_label);
           if (cfg.background_color) setBgColor(cfg.background_color);
           if (cfg.text_color)       setTextColor(cfg.text_color);
@@ -345,6 +387,59 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
       })
       .catch(() => {});
   }, []);
+
+  // Recherche Google My Business via le backend
+  function handleGmbInput(value: string) {
+    setGmbImported(false);
+    if (gmbTimeout.current) clearTimeout(gmbTimeout.current);
+    if (value.trim().length < 2) { setGmbResults([]); return; }
+    gmbTimeout.current = setTimeout(async () => {
+      setGmbLoading(true);
+      try {
+        const results = await apiClient.get<Array<{ place_id: string; name: string; address: string; type: string }>>(
+          `/business/places/search?query=${encodeURIComponent(value)}`
+        );
+        setGmbResults(results);
+      } catch {
+        // silencieux
+      } finally {
+        setGmbLoading(false);
+      }
+    }, 400);
+  }
+
+  async function selectGmbPlace(placeId: string) {
+    setGmbResults([]);
+    setGmbLoading(true);
+    try {
+      const details = await apiClient.get<{ name?: string; address?: string; phone?: string; type?: string; photo_urls?: string[] }>(
+        `/business/places/details?place_id=${placeId}`
+      );
+      setBizPlaceId(placeId);
+      if (details.name)    setBizName(details.name);
+      if (details.address) setBizAddress(details.address);
+      if (details.phone)   setBizPhone(details.phone);
+      if (details.type)    setBizType(details.type);
+      if (details.photo_urls?.length) setGmbPhotos(details.photo_urls);
+      setGmbOpen(false);
+      setGmbImported(true);
+    } finally {
+      setGmbLoading(false);
+    }
+  }
+
+  // Appliquer une photo Google comme logo (télécharge et upload sur R2)
+  async function applyGmbPhoto(url: string) {
+    setApplyingPhoto(url);
+    try {
+      const data = await apiClient.post<{ logo_url: string }>("/business/logo-from-url", { url });
+      setLogoPreview(data.logo_url);
+    } catch {
+      setError("Impossible d'appliquer cette photo.");
+    } finally {
+      setApplyingPhoto(null);
+    }
+  }
 
   // Upload logo en temps réel
   async function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -377,37 +472,61 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
 
   // Sauvegarde finale (étape 4)
   async function handleFinish() {
+    if (!thresholdOptions.includes(threshold)) {
+      setError("Choisissez un nombre de tampons entre 8 et 15.");
+      return;
+    }
     const t = parseInt(threshold, 10);
-    if (isNaN(t) || t < 1 || t > 50) { setError("Nombre de tampons : entre 1 et 50."); return; }
     if (reward.trim().length < 2)     { setError("Décrivez la récompense."); return; }
     setError(null);
     setSaving(true);
     const token = localStorage.getItem("access_token");
     try {
-      // 1. Nom + type d'établissement
-      if (bizName.trim().length >= 2) {
-        await fetch(`${API_URL}/api/v1/business`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
-          body: JSON.stringify({ name: bizName.trim(), settings_json: { establishment_type: bizType } }),
-        });
+      // 1. Nom + type d'établissement + adresse + téléphone
+      const bizRes = await fetch(`${API_URL}/api/v1/business`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+        body: JSON.stringify({
+          name: bizName.trim(),
+          settings_json: {
+            establishment_type: bizType,
+            ...(bizAddress  && { address:  bizAddress }),
+            ...(bizPhone    && { phone:    bizPhone }),
+            ...(bizPlaceId  && { place_id: bizPlaceId }),
+          },
+        }),
+      });
+      if (!bizRes.ok) {
+        const d = await bizRes.json();
+        setError(d.message ?? "Erreur lors de la sauvegarde de l'établissement.");
+        return;
       }
-      // 2. Programme + design (une seule requête avec versioning)
-      if (programId) {
-        const res = await fetch(`${API_URL}/api/v1/business/programs/${programId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
-          body: JSON.stringify({
-            name: "Carte fidélité",
-            config: { threshold: t, reward_label: reward.trim(), background_color: bgColor, text_color: textColor },
-          }),
-        });
-        if (!res.ok) {
-          const d = await res.json();
-          setError(d.message ?? "Erreur lors de la sauvegarde.");
-          return;
-        }
+
+      // 2. Programme + design — créer si inexistant, sinon mettre à jour
+      const programPayload = {
+        name: "Carte fidélité",
+        config: { threshold: t, reward_label: reward.trim(), background_color: bgColor, text_color: textColor },
+      };
+      const progRes = programId
+        ? await fetch(`${API_URL}/api/v1/business/programs/${programId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+            body: JSON.stringify(programPayload),
+          })
+        : await fetch(`${API_URL}/api/v1/business/programs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+            body: JSON.stringify({ ...programPayload, type: "STAMPS" }),
+          });
+
+      if (!progRes.ok) {
+        const d = await progRes.json();
+        setError(d.message ?? "Erreur lors de la sauvegarde du programme.");
+        return;
       }
+      // Invalider le cache SWR pour forcer un re-fetch immédiat dans le dashboard
+      await swrMutate("/business");
+      await swrMutate("/business/stats");
       onClose();
     } catch {
       setError("Impossible de contacter l'API.");
@@ -441,7 +560,7 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
             {step === 4 && "Design de votre carte"}
           </h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            {step === 1 && "Ce nom sera permanent et utilisé dans l'URL de votre QR code d'inscription."}
+            {step === 1 && "Recherchez votre établissement sur Google pour le sélectionner, ou tapez son nom manuellement."}
             {step === 2 && "Optionnel — personnalisez votre carte fidélité avec votre logo."}
             {step === 3 && "Définissez les règles de votre programme de tampons."}
             {step === 4 && "Choisissez les couleurs de votre carte Apple Wallet et Google Wallet."}
@@ -454,18 +573,68 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
           {/* ── Étape 1 : Établissement ── */}
           {step === 1 && (
             <>
-              <div>
+              {/* Nom + dropdown Google My Business */}
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nom de l'établissement
                 </label>
-                <input
-                  type="text" autoFocus required minLength={2}
-                  placeholder="Ex : Salon Élégance, BB Dynasty…"
-                  value={bizName}
-                  onChange={(e) => setBizName(e.target.value)}
-                  className={inputCls}
-                />
+                <div className="relative">
+                  <input
+                    type="text" autoFocus required minLength={2}
+                    placeholder="Recherchez votre établissement sur Google…"
+                    value={bizName}
+                    onChange={(e) => {
+                      setBizName(e.target.value);
+                      setGmbImported(false);
+                      setGmbOpen(true);
+                      handleGmbInput(e.target.value);
+                    }}
+                    onFocus={() => { if (bizName.trim().length >= 2) setGmbOpen(true); }}
+                    onBlur={() => setTimeout(() => setGmbOpen(false), 150)}
+                    className={inputCls}
+                  />
+                  {gmbLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                  )}
+                </div>
+                <div className="mt-1.5 flex items-center gap-1">
+                  <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" aria-hidden="true">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  <span className="text-xs text-gray-400">Suggestions Google My Business</span>
+                </div>
+
+                {/* Dropdown résultats */}
+                {gmbOpen && gmbResults.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    {gmbResults.map((r) => (
+                      <button
+                        key={r.place_id} type="button"
+                        onMouseDown={() => selectGmbPlace(r.place_id)}
+                        className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                      >
+                        <Search className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
+                          <p className="text-xs text-gray-400 truncate">{r.address}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Confirmation import */}
+                {gmbImported && (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+                    <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                    Données importées depuis Google — vérifiez et continuez.
+                  </div>
+                )}
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Type d'établissement
@@ -476,13 +645,33 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
                   ))}
                 </select>
               </div>
-              <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <span className="text-base mt-0.5" aria-hidden>🔒</span>
-                <p className="text-xs text-amber-700">
-                  <strong className="font-semibold text-amber-800">Ce nom sera permanent.</strong>{" "}
-                  Il déterminera l'URL de votre QR code (/join/…). Il ne pourra plus être modifié.
-                </p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Adresse
+                </label>
+                <input
+                  type="text"
+                  placeholder="12 rue de la Paix, 75001 Paris"
+                  value={bizAddress}
+                  onChange={(e) => setBizAddress(e.target.value)}
+                  className={inputCls}
+                />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Téléphone
+                </label>
+                <input
+                  type="tel"
+                  placeholder="Ex : 06 12 34 56 78"
+                  value={bizPhone}
+                  onChange={(e) => setBizPhone(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+
               {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
               <button
                 onClick={() => {
@@ -499,57 +688,94 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
           {/* ── Étape 2 : Logo ── */}
           {step === 2 && (
             <>
-              <div className="flex items-center gap-4">
-                {logoPreview ? (
+              {/* Aperçu logo sélectionné */}
+              {logoPreview && (
+                <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
                   <div className="relative shrink-0">
-                    <img src={logoPreview} alt="Logo" className="w-20 h-20 rounded-xl object-cover border border-gray-200" />
-                    <button
-                      type="button"
-                      onClick={() => setLogoPreview(null)}
-                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
-                    >
+                    <img src={logoPreview} alt="Logo" className="w-14 h-14 rounded-xl object-cover border border-gray-200" />
+                    <button type="button" onClick={() => setLogoPreview(null)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600">
                       <X className="h-3 w-3" />
                     </button>
-                    {logoUploading && (
-                      <div className="absolute inset-0 rounded-xl bg-white/80 flex items-center justify-center">
-                        <div className="h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    )}
                   </div>
-                ) : (
+                  <div>
+                    <p className="text-sm font-medium text-green-800">Logo sélectionné ✓</p>
+                    <p className="text-xs text-green-600">Uploadé sur votre espace</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Photos Google My Business */}
+              {!logoPreview && gmbPhotos.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" aria-hidden="true">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    Photos de votre établissement sur Google
+                  </p>
+                  <div className="grid grid-cols-5 gap-2">
+                    {gmbPhotos.map((url, i) => (
+                      <button
+                        key={i} type="button"
+                        disabled={applyingPhoto !== null}
+                        onClick={() => applyGmbPhoto(url)}
+                        className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 hover:border-blue-400 hover:scale-105 transition-all disabled:opacity-60 group"
+                      >
+                        <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                          <span className="opacity-0 group-hover:opacity-100 text-white text-[10px] font-semibold transition-opacity">
+                            Choisir
+                          </span>
+                        </div>
+                        {applyingPhoto === url && (
+                          <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                            <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">Cliquez sur une photo pour l'utiliser comme logo — elle sera uploadée sur votre espace.</p>
+                </div>
+              )}
+
+              {/* Upload manuel */}
+              {!logoPreview && (
+                <div className={`flex items-center gap-4 ${gmbPhotos.length > 0 ? "pt-3 border-t border-gray-100" : ""}`}>
                   <div
                     onClick={() => logoInputRef.current?.click()}
-                    className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors shrink-0"
+                    className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors shrink-0"
                   >
-                    <Store className="h-6 w-6" />
+                    <Store className="h-5 w-5" />
                     <span className="text-xs">Logo</span>
                   </div>
-                )}
-                <div className="space-y-1.5">
-                  <button
-                    type="button"
-                    disabled={logoUploading}
-                    onClick={() => logoInputRef.current?.click()}
-                    className="inline-flex items-center gap-2 py-1.5 px-3 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                  >
-                    <Upload className="h-4 w-4" />
-                    {logoUploading ? "Upload en cours…" : logoPreview ? "Changer" : "Choisir un fichier"}
-                  </button>
-                  <p className="text-xs text-gray-400">JPG, PNG, SVG, WEBP — max 2 Mo</p>
+                  <div className="space-y-1">
+                    <button type="button" disabled={logoUploading} onClick={() => logoInputRef.current?.click()}
+                      className="inline-flex items-center gap-2 py-1.5 px-3 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                      <Upload className="h-4 w-4" />
+                      {logoUploading ? "Upload en cours…" : gmbPhotos.length > 0 ? "Ou uploader votre propre logo" : "Choisir un fichier"}
+                    </button>
+                    <p className="text-xs text-gray-400">JPG, PNG, SVG, WEBP — max 2 Mo</p>
+                  </div>
                 </div>
-              </div>
-              <input
-                ref={logoInputRef} type="file"
+              )}
+
+              <input ref={logoInputRef} type="file"
                 accept="image/jpeg,image/png,image/svg+xml,image/webp"
-                onChange={handleLogoFile} className="hidden"
-              />
+                onChange={handleLogoFile} className="hidden" />
+
               {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
               <div className="flex gap-3">
                 <button type="button" onClick={() => { setError(null); setStep(1); }}
                   className="py-2 px-4 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
                   ← Retour
                 </button>
-                <button type="button" disabled={logoUploading} onClick={() => { setError(null); setStep(3); }}
+                <button type="button" disabled={logoUploading || applyingPhoto !== null}
+                  onClick={() => { setError(null); setStep(3); }}
                   className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
                   {logoPreview ? "Continuer →" : "Passer cette étape →"}
                 </button>
@@ -565,9 +791,13 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
                   Nombre de tampons pour une récompense
                 </label>
                 <div className="flex items-center gap-3">
-                  <input type="number" min={1} max={50} value={threshold}
+                  <select value={threshold}
                     onChange={(e) => setThreshold(e.target.value)}
-                    className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {thresholdOptions.map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
                   <span className="text-sm text-gray-500">tampons</span>
                 </div>
               </div>
@@ -590,8 +820,7 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
                   ← Retour
                 </button>
                 <button type="button" onClick={() => {
-                  const t = parseInt(threshold, 10);
-                  if (isNaN(t) || t < 1 || t > 50) { setError("Nombre de tampons : entre 1 et 50."); return; }
+                  if (!thresholdOptions.includes(threshold)) { setError("Choisissez un nombre de tampons entre 8 et 15."); return; }
                   if (reward.trim().length < 2)     { setError("Décrivez la récompense."); return; }
                   setError(null); setStep(4);
                 }}
@@ -605,16 +834,16 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
           {/* ── Étape 4 : Design ── */}
           {step === 4 && (
             <>
-              {/* Aperçu mini-carte */}
-              <div
-                className="rounded-xl p-4 transition-colors"
-                style={{ backgroundColor: bgColor, color: textColor === "dark" ? "#111" : "#fff" }}
-              >
-                <p className="text-xs font-semibold opacity-70 mb-0.5">TAMPONS</p>
-                <p className="text-lg font-bold tracking-wide">{"●".repeat(3)}{"○".repeat(7)}</p>
-                <p className="text-sm mt-1 opacity-80">{bizName || "Votre établissement"}</p>
-                <p className="text-xs opacity-60 mt-0.5">{reward}</p>
-              </div>
+              {/* Aperçu Apple Wallet */}
+              <AppleCard
+                businessName={bizName || "Votre établissement"}
+                logoUrl={logoPreview}
+                programName="Carte fidélité"
+                threshold={parseInt(threshold, 10) || 10}
+                rewardLabel={reward || "Récompense"}
+                bgColor={bgColor}
+                textColor={textColor}
+              />
 
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Couleur de fond</p>
@@ -666,5 +895,110 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Apple Wallet mockup (réutilisé dans l'étape 4 de l'onboarding) ──────────
+
+interface CardPreviewProps {
+  businessName: string;
+  logoUrl: string | null;
+  programName: string;
+  threshold: number;
+  rewardLabel: string;
+  bgColor: string;
+  textColor: "light" | "dark";
+}
+
+function AppleCard({ businessName, logoUrl, programName, threshold, rewardLabel, bgColor, textColor }: CardPreviewProps) {
+  const tc  = textColor === "light" ? "#ffffff" : "#111827";
+  const dim = textColor === "light" ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.4)";
+  const filled = Math.min(Math.ceil(threshold * 0.55), threshold);
+  const dots   = Math.min(threshold, 10);
+
+  return (
+    <div
+      className="w-full max-w-[260px] mx-auto rounded-[22px] overflow-hidden shadow-xl select-none"
+      style={{ backgroundColor: bgColor }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
+        {logoUrl
+          ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
+          : <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)" }}>
+              <Store className="h-4 w-4" style={{ color: tc }} />
+            </div>
+        }
+        <span className="flex-1 min-w-0 text-[13px] font-semibold truncate" style={{ color: tc }}>
+          {businessName}
+        </span>
+        <svg viewBox="0 0 20 14" className="h-3.5 w-3.5 shrink-0" style={{ opacity: 0.55 }}>
+          <rect width="20" height="14" rx="2.5" fill={tc} />
+          <rect y="4" width="20" height="3.5" fill={bgColor} />
+          <circle cx="15" cy="10" r="2.5" fill={bgColor} opacity="0.6" />
+        </svg>
+      </div>
+
+      <div className="mx-4 mb-3" style={{ height: 1, background: "rgba(255,255,255,0.12)" }} />
+
+      <div className="px-4 pb-3">
+        <p className="text-[9px] uppercase tracking-[0.12em] mb-0.5" style={{ color: dim }}>Programme</p>
+        <p className="text-[13px] font-bold mb-3.5" style={{ color: tc }}>{programName}</p>
+
+        <p className="text-[9px] uppercase tracking-[0.12em] mb-2" style={{ color: dim }}>Tampons</p>
+        <div className="flex flex-wrap gap-1.5 mb-1.5">
+          {Array.from({ length: dots }).map((_, i) => (
+            <div
+              key={i}
+              className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold"
+              style={i < filled
+                ? { background: tc, color: bgColor }
+                : { background: "rgba(255,255,255,0.10)", border: `1px solid rgba(255,255,255,0.22)`, color: dim }
+              }
+            >
+              {i < filled ? "✓" : ""}
+            </div>
+          ))}
+          {threshold > 10 && (
+            <span className="text-[9px] self-center ml-1" style={{ color: dim }}>+{threshold - 10}</span>
+          )}
+        </div>
+        <p className="text-[10px]" style={{ color: dim }}>
+          {filled} / {threshold} — <span style={{ color: tc }}>{rewardLabel}</span>
+        </p>
+      </div>
+
+      <div className="mx-3 mb-3 bg-white rounded-xl p-3 flex flex-col items-center gap-1">
+        <OnboardingQrSvg size={56} />
+        <p className="text-[8px] text-gray-400 tracking-wide">QR Code</p>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingQrSvg({ size = 56 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="3" height="3" rx="0.4" fill="#111" />
+      <rect x="0.5" y="0.5" width="2" height="2" rx="0.2" fill="white" />
+      <rect x="1" y="1" width="1" height="1" fill="#111" />
+      <rect x="7" y="0" width="3" height="3" rx="0.4" fill="#111" />
+      <rect x="7.5" y="0.5" width="2" height="2" rx="0.2" fill="white" />
+      <rect x="8" y="1" width="1" height="1" fill="#111" />
+      <rect x="0" y="7" width="3" height="3" rx="0.4" fill="#111" />
+      <rect x="0.5" y="7.5" width="2" height="2" rx="0.2" fill="white" />
+      <rect x="1" y="8" width="1" height="1" fill="#111" />
+      <rect x="4" y="0" width="1" height="1" fill="#111" />
+      <rect x="6" y="0" width="1" height="1" fill="#111" />
+      <rect x="4" y="2" width="2" height="1" fill="#111" />
+      <rect x="3" y="3" width="1" height="2" fill="#111" />
+      <rect x="5" y="4" width="2" height="1" fill="#111" />
+      <rect x="7" y="4" width="1" height="2" fill="#111" />
+      <rect x="9" y="4" width="1" height="3" fill="#111" />
+      <rect x="4" y="6" width="1" height="1" fill="#111" />
+      <rect x="3" y="7" width="1" height="1" fill="#111" />
+      <rect x="5" y="8" width="2" height="1" fill="#111" />
+      <rect x="4" y="9" width="3" height="1" fill="#111" />
+    </svg>
   );
 }

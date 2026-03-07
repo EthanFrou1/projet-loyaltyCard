@@ -13,6 +13,10 @@ const JWT_REFRESH_SECRET = process.env["JWT_REFRESH_SECRET"] ?? "dev-refresh-sec
 const JWT_REFRESH_EXPIRES_IN = process.env["JWT_REFRESH_EXPIRES_IN"] ?? "30d";
 
 export class AuthService {
+  private mapRole(role: string): "OWNER" | "STAFF" {
+    return role === "ADMIN" || role === "OWNER" ? "OWNER" : "STAFF";
+  }
+
   /**
    * Vérifie les credentials et retourne les tokens si valides.
    */
@@ -27,7 +31,8 @@ export class AuthService {
     const passwordValid = await bcrypt.compare(password, user.password_hash);
     if (!passwordValid) return null;
 
-    const accessToken = this.signAccessToken(user.id, user.business_id, user.role);
+    const mappedRole = this.mapRole(user.role);
+    const accessToken = this.signAccessToken(user.id, user.business_id, mappedRole);
     const refreshToken = this.signRefreshToken(user.id);
 
     return {
@@ -36,7 +41,7 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email,
-        role: user.role,
+        role: mappedRole,
         business_id: user.business_id,
         business_name: user.business.name,
       },
@@ -52,7 +57,7 @@ export class AuthService {
       const user = await prisma.user.findUnique({ where: { id: payload.sub } });
       if (!user) return null;
 
-      const accessToken = this.signAccessToken(user.id, user.business_id, user.role);
+      const accessToken = this.signAccessToken(user.id, user.business_id, this.mapRole(user.role));
       return { access_token: accessToken };
     } catch {
       return null;
@@ -73,7 +78,7 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
-      role: user.role,
+      role: this.mapRole(user.role),
       business: {
         id: user.business.id,
         name: user.business.name,
@@ -101,7 +106,7 @@ export class AuthService {
 
   // ─── Helpers privés ─────────────────────────────────────────────────────────
 
-  private signAccessToken(userId: string, businessId: string, role: string) {
+  private signAccessToken(userId: string, businessId: string, role: "OWNER" | "STAFF") {
     return jwt.sign(
       { sub: userId, business_id: businessId, role },
       JWT_SECRET,

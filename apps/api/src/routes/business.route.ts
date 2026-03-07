@@ -20,6 +20,7 @@ import { StorageService } from "../lib/storage.js";
 // Correspondance types Google → nos types d'établissement
 const GOOGLE_TYPE_MAP: Record<string, string> = {
   hair_care:       "salon_coiffure",
+  barbershop:      "barbier",
   beauty_salon:    "institut_beaute",
   spa:             "spa",
   nail_salon:      "onglerie",
@@ -99,7 +100,7 @@ export async function businessRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   // GET /business/places/search?query=... — recherche Google Places
-  app.get("/places/search", async (request, reply) => {
+  app.get("/places/search", { preHandler: [app.requireOwner] }, async (request, reply) => {
     const { query } = request.query as { query?: string };
     if (!query || query.trim().length < 2) {
       return reply.status(400).send({ error: "BadRequest", message: "Requête trop courte" });
@@ -110,7 +111,7 @@ export async function businessRoutes(app: FastifyInstance) {
       return reply.status(503).send({ error: "NotConfigured", message: "Clé Google Places manquante" });
     }
 
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&type=establishment&language=fr&key=${apiKey}`;
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&language=fr&key=${apiKey}`;
     const res = await fetch(url);
     const data = await res.json() as { results: Array<{ place_id: string; name: string; formatted_address: string; types: string[] }> };
 
@@ -125,7 +126,7 @@ export async function businessRoutes(app: FastifyInstance) {
   });
 
   // GET /business/places/details?place_id=... — détails complets d'un lieu
-  app.get("/places/details", async (request, reply) => {
+  app.get("/places/details", { preHandler: [app.requireOwner] }, async (request, reply) => {
     const { place_id } = request.query as { place_id?: string };
     if (!place_id) {
       return reply.status(400).send({ error: "BadRequest", message: "place_id manquant" });
@@ -226,7 +227,7 @@ export async function businessRoutes(app: FastifyInstance) {
   });
 
   // POST /business/logo — upload du logo via multipart/form-data
-  app.post("/logo", async (request, reply) => {
+  app.post("/logo", { preHandler: [app.requireOwner] }, async (request, reply) => {
     const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/svg+xml", "image/webp"];
     const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2 Mo
 
@@ -287,8 +288,100 @@ export async function businessRoutes(app: FastifyInstance) {
     }
   });
 
+  // POST /business/logo-from-url — télécharge une image distante et l'upload sur R2
+  app.post("/logo-from-url", { preHandler: [app.requireOwner] }, async (request, reply) => {
+    const body = z.object({ url: z.string().url() }).safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ error: "BadRequest", message: "URL invalide" });
+    }
+
+    try {
+      const imgRes = await fetch(body.data.url);
+      if (!imgRes.ok) throw new Error("Impossible de télécharger l'image");
+
+      const rawType = imgRes.headers.get("content-type") ?? "image/jpeg";
+      const contentType = rawType.split(";")[0]?.trim() ?? "image/jpeg";
+      const extMap: Record<string, string> = {
+        "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+      };
+      const ext = extMap[contentType] ?? "jpg";
+      const buffer = Buffer.from(await imgRes.arrayBuffer());
+
+      const storage = new StorageService();
+      const key = `logos/${request.user.business_id}/logo.${ext}`;
+      const logoUrl = await storage.upload(buffer, key, contentType);
+
+      const updated = await prisma.business.update({
+        where: { id: request.user.business_id },
+        data:  { logo_url: logoUrl },
+      });
+      return reply.send({ logo_url: updated.logo_url });
+    } catch (err) {
+      request.log.error(err, "Erreur logo-from-url");
+      return reply.status(500).send({
+        error: "StorageError",
+        message: "Impossible de récupérer ou d'uploader l'image.",
+      });
+    }
+  });
+
+  // POST /business/cover-photo — upload de la photo d'établissement (strip Wallet)
+  app.post("/cover-photo", { preHandler: [app.requireOwner] }, async (request, reply) => {
+    const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+    const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 Mo
+
+    let file;
+    try {
+      file = await request.file();
+    } catch {
+      return reply.status(400).send({ error: "BadRequest", message: "Fichier manquant dans la requête." });
+    }
+
+    if (!file) {
+      return reply.status(400).send({ error: "BadRequest", message: "Aucun fichier reçu." });
+    }
+
+    if (!ALLOWED_TYPES.includes(file.mimetype)) {
+      return reply.status(400).send({
+        error: "BadRequest",
+        message: "Format non supporté. Utilisez JPG, PNG ou WEBP.",
+      });
+    }
+
+    const buffer = await file.toBuffer();
+
+    if (buffer.length > MAX_SIZE_BYTES) {
+      return reply.status(400).send({
+        error: "BadRequest",
+        message: "Fichier trop volumineux (max 5 Mo).",
+      });
+    }
+
+    try {
+      const extMap: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+      const ext = extMap[file.mimetype] ?? "jpg";
+      const key = `covers/${request.user.business_id}/cover.${ext}`;
+
+      const storage = new StorageService();
+      const coverUrl = await storage.upload(buffer, key, file.mimetype);
+
+      const updated = await prisma.business.update({
+        where: { id: request.user.business_id },
+        data: { cover_photo_url: coverUrl },
+      });
+
+      return reply.send({ cover_photo_url: updated.cover_photo_url });
+    } catch (err) {
+      request.log.error(err, "Erreur upload cover-photo");
+      return reply.status(500).send({
+        error: "StorageError",
+        message: "Impossible d'uploader la photo. Vérifiez la configuration R2.",
+      });
+    }
+  });
+
   // PATCH /business
-  app.patch("/", async (request, reply) => {
+  app.patch("/", { preHandler: [app.requireOwner] }, async (request, reply) => {
     const body = UpdateBusinessBody.safeParse(request.body);
     if (!body.success) {
       return reply.status(400).send({ error: "ValidationError", message: body.error.message });
@@ -301,6 +394,23 @@ export async function businessRoutes(app: FastifyInstance) {
 
     if (!current) {
       return reply.status(404).send({ error: "NotFound", message: "Business non trouvé" });
+    }
+
+    // Vérifier si le place_id Google est déjà utilisé par un autre établissement
+    const incomingPlaceId = (body.data.settings_json as Record<string, unknown> | undefined)?.place_id;
+    if (typeof incomingPlaceId === "string" && incomingPlaceId) {
+      const duplicate = await prisma.business.findFirst({
+        where: {
+          settings_json: { path: ["place_id"], equals: incomingPlaceId },
+          NOT: { id: request.user.business_id },
+        },
+      });
+      if (duplicate) {
+        return reply.status(409).send({
+          error: "Conflict",
+          message: "Un compte existe déjà pour cet établissement Google. Contactez le support si c'est le vôtre.",
+        });
+      }
     }
 
     const { regenerate_slug, ...restData } = body.data;
@@ -341,7 +451,7 @@ export async function businessRoutes(app: FastifyInstance) {
 
   // POST /business/programs
   // Gating par plan : Starter=1, Pro=3, Business=illimité
-  app.post("/programs", async (request, reply) => {
+  app.post("/programs", { preHandler: [app.requireOwner] }, async (request, reply) => {
     const body = CreateProgramBody.safeParse(request.body);
     if (!body.success) {
       return reply.status(400).send({ error: "ValidationError", message: body.error.message });
@@ -372,7 +482,7 @@ export async function businessRoutes(app: FastifyInstance) {
         business_id: request.user.business_id,
         name: body.data.name,
         type: body.data.type,
-        config_json: body.data.config,
+        config_json: body.data.config as never,
         status: "ACTIVE",
         version: 1,
       },
@@ -432,7 +542,7 @@ export async function businessRoutes(app: FastifyInstance) {
 
   // PATCH /business/programs/:id/design — design uniquement, sans versioning
   // Mise à jour des champs visuels (couleur fond, texte) sans créer de nouvelle version.
-  app.patch("/programs/:id/design", async (request, reply) => {
+  app.patch("/programs/:id/design", { preHandler: [app.requireOwner] }, async (request, reply) => {
     const params = ProgramIdParams.safeParse(request.params);
     if (!params.success) {
       return reply.status(400).send({ error: "ValidationError", message: "ID invalide" });
@@ -459,9 +569,9 @@ export async function businessRoutes(app: FastifyInstance) {
       where: { id: program.id },
       data: {
         config_json: {
-          ...((program.config_json as object) ?? {}),
+          ...((program.config_json as Record<string, unknown>) ?? {}),
           ...body.data,
-        },
+        } as never,
       },
     });
 
@@ -471,7 +581,7 @@ export async function businessRoutes(app: FastifyInstance) {
   // PATCH /business/programs/:id
   // Versioning : archive l'ancienne version et crée une nouvelle version active.
   // Les clients existants gardent leur program_id → continueront avec l'ancien seuil.
-  app.patch("/programs/:id", async (request, reply) => {
+  app.patch("/programs/:id", { preHandler: [app.requireOwner] }, async (request, reply) => {
     const params = ProgramIdParams.safeParse(request.params);
     if (!params.success) {
       return reply.status(400).send({ error: "ValidationError", message: "ID invalide" });
@@ -502,7 +612,7 @@ export async function businessRoutes(app: FastifyInstance) {
           business_id: request.user.business_id,
           name: body.data.name ?? existing.name,
           type: body.data.type ?? existing.type,
-          config_json: body.data.config ?? existing.config_json,
+          config_json: (body.data.config ?? existing.config_json) as never,
           version: existing.version + 1,
           status: "ACTIVE",
         },

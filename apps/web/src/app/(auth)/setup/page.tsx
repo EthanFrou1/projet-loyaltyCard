@@ -35,8 +35,7 @@ export default function SetupPage() {
       const res = await fetch(`${API_URL}/api/v1/auth/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // business_name vide → l'API crée "Mon établissement" par défaut
-        body: JSON.stringify({ email: form.email, password: form.password, business_name: "Mon établissement" }),
+        body: JSON.stringify({ email: form.email, password: form.password }),
       });
 
       const data = await res.json();
@@ -48,8 +47,6 @@ export default function SetupPage() {
 
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
-      // Signal pour afficher la modale d'onboarding au 1er accès au dashboard
-      localStorage.setItem("show_onboarding", "1");
 
       router.push("/dashboard");
     } catch {

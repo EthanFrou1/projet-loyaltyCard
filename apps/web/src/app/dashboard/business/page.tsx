@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Page Mon établissement — configuration complète du business.
  *
@@ -40,8 +42,9 @@ interface Program {
 interface Business {
   id: string;
   name: string;
-  slug: string;
+  slug: string; // conservé pour d'autres usages éventuels
   logo_url: string | null;
+  cover_photo_url: string | null;
   plan: "STARTER" | "PRO" | "BUSINESS";
   name_locked: boolean;
   settings_json: {
@@ -149,7 +152,7 @@ export default function BusinessPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          name: name.trim(),
+          ...(!nameLocked && { name: name.trim() }),
           settings_json: {
             ...(business?.settings_json ?? {}),
             establishment_type: type,
@@ -265,9 +268,9 @@ export default function BusinessPage() {
   const nameLocked = business?.name_locked ?? false;
   const isDirty =
     (!nameLocked && name.trim() !== savedSnap.name) ||
-    type           !== savedSnap.type    ||
-    address.trim() !== savedSnap.address ||
-    phone.trim()   !== savedSnap.phone;
+    type            !== savedSnap.type    ||
+    address.trim()  !== savedSnap.address ||
+    phone.trim()    !== savedSnap.phone;
 
   // ── Indicateur de progression ────────────────────────────────────────────────
   const step1Done = name.trim().length >= 2 && type !== "";
@@ -437,7 +440,7 @@ export default function BusinessPage() {
             </select>
           </Field>
 
-          <Field label="Adresse">
+          <Field label="Adresse" missing={!address.trim()}>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
               <input
@@ -450,12 +453,12 @@ export default function BusinessPage() {
             </div>
           </Field>
 
-          <Field label="Téléphone">
+          <Field label="Téléphone" missing={!phone.trim()}>
             <div className="relative">
               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
               <input
                 type="tel"
-                placeholder="07 72 04 72 20"
+                placeholder="Ex : 06 12 34 56 78"
                 value={phone}
                 onChange={(e) => {
                   const filtered = e.target.value.replace(/[^\d\s]/g, "");
@@ -518,9 +521,9 @@ export default function BusinessPage() {
       </div>{/* fin grille 2 colonnes */}
 
       {/* ── Section 3 : QR Code d'inscription ── */}
-      {business?.slug && (
+      {business?.id && (
         <QrRegistrationSection
-          slug={business.slug}
+          slug={business.id}
           businessName={business.name}
           onRegenerate={regenerateSlug}
         />
@@ -528,12 +531,16 @@ export default function BusinessPage() {
 
       {/* ── Section 4 : Apparence ── */}
       <Section id="section-appearance" title="Apparence" icon={Palette} highlighted={highlightedSection === "section-appearance"}>
-        <LogoUploadSection
-          currentLogoUrl={business?.logo_url ?? null}
-          onUploaded={(url) => {
-            setBusiness((b) => b ? { ...b, logo_url: url } : b);
-          }}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <LogoUploadSection
+            currentLogoUrl={business?.logo_url ?? null}
+            onUploaded={(url) => setBusiness((b) => b ? { ...b, logo_url: url } : b)}
+          />
+          <CoverPhotoUploadSection
+            currentCoverUrl={business?.cover_photo_url ?? null}
+            onUploaded={(url) => setBusiness((b) => b ? { ...b, cover_photo_url: url } : b)}
+          />
+        </div>
       </Section>
 
       {/* ── Modale sélection photo Google ── */}
@@ -557,10 +564,18 @@ const inputClass =
 const btnPrimary =
   "py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, missing }: { label: string; children: React.ReactNode; missing?: boolean }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+        {label}
+        {missing && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200">
+            <span className="w-1 h-1 rounded-full bg-red-500" />
+            Manquant
+          </span>
+        )}
+      </label>
       {children}
     </div>
   );
@@ -790,6 +805,152 @@ function LogoUploadSection({
       {success && (
         <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
           Logo mis à jour avec succès ✓
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Upload photo établissement ──────────────────────────────────────────────
+
+function CoverPhotoUploadSection({
+  currentCoverUrl,
+  onUploaded,
+}: {
+  currentCoverUrl: string | null;
+  onUploaded: (url: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview]     = useState<string | null>(currentCoverUrl);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [success, setSuccess]     = useState(false);
+
+  useEffect(() => { setPreview(currentCoverUrl); }, [currentCoverUrl]);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setError("Format non supporté. Utilisez JPG, PNG ou WEBP.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Fichier trop volumineux (max 5 Mo).");
+      return;
+    }
+    setError(null);
+    setPreview(URL.createObjectURL(file));
+    uploadFile(file);
+  }
+
+  async function uploadFile(file: File) {
+    setUploading(true);
+    setSuccess(false);
+    setError(null);
+    const token = localStorage.getItem("access_token");
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/business/cover-photo`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message ?? "Erreur lors de l'upload.");
+        setPreview(currentCoverUrl);
+        return;
+      }
+      onUploaded(data.cover_photo_url);
+      setPreview(data.cover_photo_url);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch {
+      setError("Impossible de contacter l'API.");
+      setPreview(currentCoverUrl);
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  function handleRemove() {
+    setPreview(null);
+    onUploaded("");
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-4">
+        {/* Aperçu de la photo */}
+        <div className="relative shrink-0">
+          {preview ? (
+            <>
+              <img
+                src={preview}
+                alt="Photo établissement"
+                className="w-24 h-16 rounded-xl object-cover border border-gray-200 shadow-sm"
+              />
+              <button
+                onClick={handleRemove}
+                title="Supprimer la photo"
+                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </>
+          ) : (
+            <div
+              onClick={() => inputRef.current?.click()}
+              className="w-24 h-16 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors"
+            >
+              <Store className="h-5 w-5" />
+              <span className="text-xs">Photo</span>
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 rounded-xl bg-white/80 flex items-center justify-center">
+              <div className="h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div>
+            <p className="text-sm font-medium text-gray-900">Photo de l'établissement</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Affichée en grand sur la carte Wallet (bannière).
+            </p>
+            <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, WEBP — max 5 Mo</p>
+          </div>
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex items-center gap-2 py-1.5 px-3 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            <Upload className="h-4 w-4" />
+            {uploading ? "Upload en cours…" : preview ? "Changer la photo" : "Choisir un fichier"}
+          </button>
+        </div>
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {error   && <ErrorBox message={error} />}
+      {success && (
+        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+          Photo mise à jour avec succès ✓
         </p>
       )}
     </div>

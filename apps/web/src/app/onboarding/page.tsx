@@ -42,6 +42,7 @@ const ESTABLISHMENT_TYPES = [
   { value: "boutique",        label: "Boutique / Commerce" },
   { value: "autre",           label: "Autre" },
 ];
+const STAMP_THRESHOLD_OPTIONS = Array.from({ length: 8 }, (_, i) => String(i + 8));
 
 const inputClass =
   "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
@@ -77,6 +78,9 @@ export default function OnboardingPage() {
   // ── Étape 3 : programme ──────────────────────────────────────────────────
   const [stampThreshold, setStampThreshold] = useState("10");
   const [rewardLabel, setRewardLabel]       = useState("10€ de réduction");
+  const stampThresholdOptions = STAMP_THRESHOLD_OPTIONS.includes(stampThreshold)
+    ? STAMP_THRESHOLD_OPTIONS
+    : [stampThreshold, ...STAMP_THRESHOLD_OPTIONS];
 
   // Pré-remplissage depuis l'API
   useEffect(() => {
@@ -219,11 +223,11 @@ export default function OnboardingPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const threshold = parseInt(stampThreshold, 10);
-    if (isNaN(threshold) || threshold < 1 || threshold > 50) {
-      setError("Le nombre de tampons doit être entre 1 et 50.");
+    if (!stampThresholdOptions.includes(stampThreshold)) {
+      setError("Choisissez un nombre de tampons entre 8 et 15.");
       return;
     }
+    const threshold = parseInt(stampThreshold, 10);
     if (rewardLabel.trim().length < 2) {
       setError("Décrivez la récompense (ex: 10€ de réduction).");
       return;
@@ -562,19 +566,20 @@ export default function OnboardingPage() {
                     Nombre de tampons pour une récompense
                   </label>
                   <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      min={1}
-                      max={50}
+                    <select
                       required
                       value={stampThreshold}
                       onChange={(e) => setStampThreshold(e.target.value)}
                       className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      {stampThresholdOptions.map((value) => (
+                        <option key={value} value={value}>{value}</option>
+                      ))}
+                    </select>
                     <span className="text-sm text-gray-500">tampons</span>
                   </div>
                   <p className="mt-1 text-xs text-gray-400">
-                    En général : 10 tampons pour un soin gratuit ou une réduction.
+                    Choisissez entre 8 et 15 tampons.
                   </p>
                 </div>
 

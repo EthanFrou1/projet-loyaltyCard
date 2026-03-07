@@ -47,6 +47,7 @@ const JobIdParams = z.object({
 
 export async function aiRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
+  app.addHook("preHandler", app.requireOwner);
 
   const aiService = new AiService();
   const storageService = new StorageService();

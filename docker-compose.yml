@@ -75,6 +75,8 @@ services:
       JWT_REFRESH_EXPIRES_IN: 30d
       # IA (à remplir avec ta vraie clé)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Google Places (import établissement)
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       # Storage R2 (à remplir)
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
@@ -85,10 +87,14 @@ services:
       GOOGLE_WALLET_ISSUER_ID: ${GOOGLE_WALLET_ISSUER_ID:-}
       GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
       GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:-}
-      # Apple Wallet (à remplir)
+      # Apple Wallet
       APPLE_PASS_TYPE_IDENTIFIER: ${APPLE_PASS_TYPE_IDENTIFIER:-}
       APPLE_TEAM_IDENTIFIER: ${APPLE_TEAM_IDENTIFIER:-}
-      APPLE_PASSKIT_WEB_SERVICE_URL: ${APPLE_PASSKIT_WEB_SERVICE_URL:-http://localhost:3001/wallet/apple}
+      APPLE_PASSKIT_WEB_SERVICE_URL: ${APPLE_PASSKIT_WEB_SERVICE_URL:-}
+      APPLE_APNS_PRODUCTION: ${APPLE_APNS_PRODUCTION:-false}
+      APPLE_SIGNER_CERT_PATH: /secrets/apple-pass-cert.pem
+      APPLE_SIGNER_KEY_PATH: /secrets/apple-pass-key.pem
+      APPLE_WWDR_CERT_PATH: /secrets/apple-wwdr.pem
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,6 +104,8 @@ services:
       # Hot-reload des sources en dev (surcharge le code compilé)
       - ./apps/api/src:/app/apps/api/src:ro
       - ./packages:/app/packages:ro
+      # Certificats Apple Wallet (hors repo, stockés dans C:/secrets/)
+      - C:/secrets:/secrets:ro
 
   # ── Worker BullMQ ───────────────────────────────────────────────────────────
   # Même image que l'API, mais pointe sur le fichier worker

@@ -60,8 +60,9 @@ export async function publicRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "BadRequest", message: "Paramètres invalides" });
     }
 
+    const identifier = params.data.slug;
     const business = await prisma.business.findFirst({
-      where: { slug: params.data.slug },
+      where: { OR: [{ id: identifier }, { slug: identifier }] },
       include: {
         programs: {
           where: { status: "ACTIVE" },
@@ -114,8 +115,9 @@ export async function publicRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "ValidationError", message: "Données invalides" });
     }
 
+    const id2 = params.data.slug;
     const business = await prisma.business.findFirst({
-      where: { slug: params.data.slug },
+      where: { OR: [{ id: id2 }, { slug: id2 }] },
       select: { id: true },
     });
 

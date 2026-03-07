@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Page Programmes de fidélité — /dashboard/programs
  *
@@ -63,6 +65,7 @@ const PLAN_STYLES: Record<string, { label: string; className: string }> = {
   PRO:      { label: "Pro",      className: "bg-blue-100 text-blue-700" },
   BUSINESS: { label: "Business", className: "bg-violet-100 text-violet-700" },
 };
+const STAMP_THRESHOLD_OPTIONS = Array.from({ length: 8 }, (_, i) => String(i + 8));
 
 // ─── Composants utilitaires ───────────────────────────────────────────────────
 
@@ -117,6 +120,7 @@ export default function ProgramsPage() {
   const searchParams = useSearchParams();
   const [business, setBusiness] = useState<Business | null>(null);
   const [loading, setLoading]   = useState(true);
+  const [userRole, setUserRole] = useState<string>("OWNER");
 
   // ── Sélection de programme + sous-onglets ──
   const [selectedId, setSelectedId]   = useState<string | null>(null);
@@ -152,16 +156,29 @@ export default function ProgramsPage() {
 
   const [showArchived, setShowArchived] = useState(false);
   const [qrExpanded, setQrExpanded] = useState(false);
+  const editThresholdOptions = STAMP_THRESHOLD_OPTIONS.includes(editThreshold)
+    ? STAMP_THRESHOLD_OPTIONS
+    : [editThreshold, ...STAMP_THRESHOLD_OPTIONS];
+  const isOwner = userRole === "OWNER" || userRole === "ADMIN";
 
   useEffect(() => {
-    if (searchParams.get("new") === "1") {
+    if (isOwner && searchParams.get("new") === "1") {
       setShowAddModal(true);
     }
-  }, [searchParams]);
+  }, [searchParams, isOwner]);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { router.push("/login"); return; }
+
+    fetch(`${API_URL}/api/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((me) => {
+        if (me?.role) setUserRole(me.role);
+      })
+      .catch(() => {});
 
     fetch(`${API_URL}/api/v1/business`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -284,15 +301,16 @@ export default function ProgramsPage() {
   // ── Édition (versioning) ─────────────────────────────────────────────────────
   function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const t = parseInt(editThreshold, 10);
+    if (!isOwner) return;
     if (editName.trim().length < 2)         { setEditError("Le nom doit faire au moins 2 caractères."); return; }
-    if (isNaN(t) || t < 1 || t > 50)        { setEditError("Le nombre de tampons doit être entre 1 et 50."); return; }
+    if (!editThresholdOptions.includes(editThreshold)) { setEditError("Choisissez un nombre de tampons entre 8 et 15."); return; }
     if (editReward.trim().length < 2)        { setEditError("Décrivez la récompense (au moins 2 caractères)."); return; }
     setEditError(null);
     setEditStep("confirm");
   }
 
   async function confirmEdit() {
+    if (!isOwner) return;
     if (!selectedId) return;
     setEditSaving(true);
     setEditError(null);
@@ -345,11 +363,12 @@ export default function ProgramsPage() {
 
   // ── Création d'un programme ──────────────────────────────────────────────────
   async function addProgram() {
-    const t = parseInt(newThreshold, 10);
-    if (!newName.trim() || isNaN(t) || t < 1 || t > 50 || !newReward.trim()) {
+    if (!isOwner) return;
+    if (!newName.trim() || !STAMP_THRESHOLD_OPTIONS.includes(newThreshold) || !newReward.trim()) {
       setAddError("Remplissez tous les champs correctement.");
       return;
     }
+    const t = parseInt(newThreshold, 10);
     setAddingProg(true);
     setAddError(null);
     const token = localStorage.getItem("access_token");
@@ -374,6 +393,7 @@ export default function ProgramsPage() {
 
   // ── Sauvegarder le design sans versioning ────────────────────────────────────
   async function saveDesign() {
+    if (!isOwner) return;
     if (!selectedId) return;
     setDesignSaving(true);
     setDesignError(null);
@@ -442,7 +462,7 @@ export default function ProgramsPage() {
     <div className="flex flex-col gap-6">
 
       {/* ── Modale création ── */}
-      {showAddModal && (
+      {showAddModal && isOwner && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
           onClick={(e) => {
@@ -461,8 +481,12 @@ export default function ProgramsPage() {
               </Field>
               <Field label="Nombre de tampons">
                 <div className="flex items-center gap-3">
-                  <input type="number" min={1} max={50} value={newThreshold}
-                    onChange={(e) => setNewThreshold(e.target.value)} className={`${inputClass} w-24`} />
+                  <select value={newThreshold}
+                    onChange={(e) => setNewThreshold(e.target.value)} className={`${inputClass} w-24`}>
+                    {STAMP_THRESHOLD_OPTIONS.map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
                   <span className="text-sm text-gray-500">tampons</span>
                 </div>
               </Field>
@@ -498,7 +522,12 @@ export default function ProgramsPage() {
               {PLAN_STYLES[plan]?.label} · {activePrograms.length}/{limit === Infinity ? "∞" : limit}
             </span>
           )}
-          {isFull ? (
+          {!isOwner ? (
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg">
+              <Lock className="h-3.5 w-3.5" />
+              Lecture seule
+            </div>
+          ) : isFull ? (
             <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">
               <Lock className="h-3.5 w-3.5" />
               Limite atteinte
@@ -522,13 +551,17 @@ export default function ProgramsPage() {
           <Star className="h-10 w-10 text-gray-300 mx-auto mb-3" />
           <p className="text-sm font-medium text-gray-500">Aucun programme actif</p>
           <p className="text-xs text-gray-400 mt-1">Créez votre premier programme de fidélité.</p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="mt-4 inline-flex items-center gap-2 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Créer un programme
-          </button>
+          {isOwner ? (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="mt-4 inline-flex items-center gap-2 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Créer un programme
+            </button>
+          ) : (
+            <p className="text-xs text-gray-400 mt-4">Accès en lecture seule pour ce compte.</p>
+          )}
         </div>
       )}
 
@@ -814,8 +847,13 @@ export default function ProgramsPage() {
                         <button
                           key={color}
                           type="button"
-                          onClick={() => { setEditBgColor(color); setDesignDirty(true); }}
+                          onClick={() => {
+                            if (!isOwner) return;
+                            setEditBgColor(color);
+                            setDesignDirty(true);
+                          }}
                           title={color}
+                          disabled={!isOwner}
                           className="w-8 h-8 rounded-lg transition-all hover:scale-110 focus:outline-none"
                           style={{
                             background: color,
@@ -835,7 +873,12 @@ export default function ProgramsPage() {
                         <input
                           type="color"
                           value={editBgColor}
-                          onChange={(e) => { setEditBgColor(e.target.value); setDesignDirty(true); }}
+                          onChange={(e) => {
+                            if (!isOwner) return;
+                            setEditBgColor(e.target.value);
+                            setDesignDirty(true);
+                          }}
+                          disabled={!isOwner}
                           className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
                         />
                       </label>
@@ -851,7 +894,12 @@ export default function ProgramsPage() {
                         <button
                           key={val}
                           type="button"
-                          onClick={() => { setEditTextColor(val); setDesignDirty(true); }}
+                          onClick={() => {
+                            if (!isOwner) return;
+                            setEditTextColor(val);
+                            setDesignDirty(true);
+                          }}
+                          disabled={!isOwner}
                           className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm transition-colors ${
                             editTextColor === val
                               ? "border-blue-500 bg-blue-50 text-blue-700 font-medium"
@@ -873,14 +921,18 @@ export default function ProgramsPage() {
 
                   {/* Bouton save */}
                   <div className="flex items-center gap-3 pt-1">
-                    <button
-                      type="button"
-                      onClick={saveDesign}
-                      disabled={!designDirty || designSaving}
-                      className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                    >
-                      {designSaving ? "Enregistrement…" : "Enregistrer le design"}
-                    </button>
+                    {isOwner ? (
+                      <button
+                        type="button"
+                        onClick={saveDesign}
+                        disabled={!designDirty || designSaving}
+                        className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                      >
+                        {designSaving ? "Enregistrement…" : "Enregistrer le design"}
+                      </button>
+                    ) : (
+                      <span className="text-sm text-gray-500">Compte staff: design en lecture seule.</span>
+                    )}
                     {designSaved && <span className="text-sm text-green-600 font-medium">Sauvegardé ✓</span>}
                     {designError && <span className="text-sm text-red-600">{designError}</span>}
                   </div>
@@ -893,6 +945,11 @@ export default function ProgramsPage() {
               <div className="max-w-lg">
                 {editStep === "form" ? (
                   <form onSubmit={handleEditSubmit} className="space-y-4">
+                    {!isOwner && (
+                      <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        Compte staff: paramètres en lecture seule.
+                      </div>
+                    )}
                     <Field label="Nom du programme">
                       <input
                         type="text"
@@ -901,20 +958,22 @@ export default function ProgramsPage() {
                         value={editName}
                         onChange={(e) => { setEditName(e.target.value); setEditDirty(true); }}
                         placeholder="Ex : Carte fidélité, Carte coiffure…"
+                        disabled={!isOwner}
                         className={inputClass}
                       />
                     </Field>
                     <Field label="Nombre de tampons pour une récompense">
                       <div className="flex items-center gap-3">
-                        <input
-                          type="number"
-                          min={1}
-                          max={50}
+                        <select
                           required
                           value={editThreshold}
                           onChange={(e) => { setEditThreshold(e.target.value); setEditDirty(true); }}
-                          className={`${inputClass} w-24`}
-                        />
+                          disabled={!isOwner}
+                          className={`${inputClass} w-24`}>
+                          {editThresholdOptions.map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
                         <span className="text-sm text-gray-500">tampons</span>
                       </div>
                     </Field>
@@ -925,22 +984,25 @@ export default function ProgramsPage() {
                         value={editReward}
                         onChange={(e) => { setEditReward(e.target.value); setEditDirty(true); }}
                         placeholder="Ex : 10€ de réduction, 1 soin offert…"
+                        disabled={!isOwner}
                         className={inputClass}
                       />
                     </Field>
                     {editError && <ErrorBox message={editError} />}
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="submit"
-                        disabled={!editDirty}
-                        className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                      >
-                        Suivant →
-                      </button>
-                      {!editDirty && (
-                        <span className="text-xs text-gray-400">Modifiez un champ pour activer</span>
-                      )}
-                    </div>
+                    {isOwner && (
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="submit"
+                          disabled={!editDirty}
+                          className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          Suivant →
+                        </button>
+                        {!editDirty && (
+                          <span className="text-xs text-gray-400">Modifiez un champ pour activer</span>
+                        )}
+                      </div>
+                    )}
                   </form>
                 ) : (
                   /* Étape 2 : confirmation versioning */
@@ -982,13 +1044,15 @@ export default function ProgramsPage() {
                       >
                         ← Retour
                       </button>
-                      <button
-                        onClick={confirmEdit}
-                        disabled={editSaving}
-                        className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                      >
-                        {editSaving ? "Enregistrement…" : "Confirmer la modification"}
-                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={confirmEdit}
+                          disabled={editSaving}
+                          className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          {editSaving ? "Enregistrement…" : "Confirmer la modification"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1307,4 +1371,3 @@ function BarcodeSvg() {
     </div>
   );
 }
-

@@ -129,7 +129,7 @@ async function cleanLogo(
   });
 
   // 4. Récupérer l'image — gpt-image-1 retourne du base64
-  const imageData = response.data[0];
+  const imageData = response.data?.[0];
   if (!imageData) throw new Error("OpenAI n'a pas retourné d'image");
 
   let imageBuffer: Buffer;
@@ -172,7 +172,7 @@ async function generatePassDesign(
       response_format: "url",
     });
 
-    const imageUrl = response.data[0]?.url;
+    const imageUrl = response.data?.[0]?.url;
     if (!imageUrl) continue;
 
     const storageUrl = await storageService.uploadFromUrl(
@@ -210,7 +210,7 @@ async function generatePromoAssets(
       response_format: "url",
     });
 
-    const imageUrl = response.data[0]?.url;
+    const imageUrl = response.data?.[0]?.url;
     if (!imageUrl) continue;
 
     const storageUrl = await storageService.uploadFromUrl(

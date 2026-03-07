@@ -28,6 +28,9 @@ const DeviceParams = z.object({
   passTypeId: z.string(),
   serial: z.string(),
 });
+const AppleRegistrationsQuery = z.object({
+  passesUpdatedSince: z.coerce.number().int().nonnegative().optional(),
+});
 
 export async function walletRoutes(app: FastifyInstance) {
   const googleService = new GoogleWalletService();
@@ -122,6 +125,14 @@ export async function walletRoutes(app: FastifyInstance) {
         serial: params.data.serial,
         pushToken: body.pushToken,
       });
+      app.log.info(
+        {
+          deviceId: params.data.deviceId,
+          passTypeId: params.data.passTypeId,
+          serial: params.data.serial,
+        },
+        "Apple device registered"
+      );
 
       return reply.status(201).send();
     }
@@ -138,6 +149,14 @@ export async function walletRoutes(app: FastifyInstance) {
         deviceLibraryId: params.data.deviceId,
         serial: params.data.serial,
       });
+      app.log.info(
+        {
+          deviceId: params.data.deviceId,
+          passTypeId: params.data.passTypeId,
+          serial: params.data.serial,
+        },
+        "Apple device unregistered"
+      );
 
       return reply.status(200).send();
     }
@@ -147,8 +166,25 @@ export async function walletRoutes(app: FastifyInstance) {
   app.get(
     "/apple/devices/:deviceId/registrations/:passTypeId",
     async (request, reply) => {
-      // TODO: retourner les serials modifiés depuis lastUpdated
-      return reply.send({ serialNumbers: [], lastUpdated: new Date().toISOString() });
+      const { deviceId } = request.params as { deviceId: string };
+      const query = AppleRegistrationsQuery.safeParse(request.query);
+      if (!query.success) return reply.status(400).send({ error: "ValidationError" });
+
+      const payload = await appleService.getUpdatedSerialsForDevice(
+        deviceId,
+        query.data.passesUpdatedSince
+      );
+      app.log.info(
+        {
+          deviceId,
+          passTypeId: (request.params as { passTypeId: string }).passTypeId,
+          passesUpdatedSince: query.data.passesUpdatedSince ?? null,
+          serialCount: payload.serialNumbers.length,
+          lastUpdated: payload.lastUpdated,
+        },
+        "Apple device requested updated serials"
+      );
+      return reply.send(payload);
     }
   );
 

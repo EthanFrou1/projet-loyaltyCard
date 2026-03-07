@@ -93,6 +93,7 @@ export interface CustomerResponse {
   created_at: string;
   program_id: string | null;    // programme auquel le client est inscrit
   program_name: string | null;  // nom du programme (null si aucun / ancien client)
+  program_threshold: number | null; // seuil de tampons du programme du client
 }
 
 export interface CustomerDetailResponse extends CustomerResponse {

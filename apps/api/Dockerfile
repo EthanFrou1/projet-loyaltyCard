@@ -21,8 +21,6 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules         ./node_modules
-COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
-COPY --from=deps /app/apps/api/node_modules           ./apps/api/node_modules
 
 # Copier les sources
 COPY packages/database/ ./packages/database/
@@ -30,10 +28,10 @@ COPY packages/types/    ./packages/types/
 COPY apps/api/          ./apps/api/
 COPY tsconfig.base.json ./
 
-# Générer le client Prisma
-RUN cd packages/database && npx prisma generate
+# Générer le client Prisma et compiler le package database
+RUN cd packages/database && npx prisma generate && npx tsc
 
-# Compiler le TypeScript
+# Compiler l'API
 RUN cd apps/api && npx tsc
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -45,16 +43,23 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# OpenSSL requis par le moteur Prisma sur Alpine
+RUN apk add --no-cache openssl
+
 # Créer un utilisateur non-root pour la sécurité
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 fastify
 
-# Copier uniquement ce qui est nécessaire en prod
-COPY --from=builder --chown=fastify:nodejs /app/apps/api/dist         ./dist
-COPY --from=builder --chown=fastify:nodejs /app/packages/database/dist ./packages/database/dist
-COPY --from=builder --chown=fastify:nodejs /app/node_modules           ./node_modules
+# Copier le code API compilé
+COPY --from=builder --chown=fastify:nodejs /app/apps/api/dist ./dist
+# Copier node_modules (contient un symlink @loyalty/database → ../../packages/database)
+COPY --from=builder --chown=fastify:nodejs /app/node_modules  ./node_modules
+# Supprimer le symlink workspace et le remplacer par les vrais fichiers compilés
+RUN rm -rf ./node_modules/@loyalty/database
+COPY --from=builder --chown=fastify:nodejs /app/packages/database/dist        ./node_modules/@loyalty/database/dist
+COPY --from=builder --chown=fastify:nodejs /app/packages/database/package.json ./node_modules/@loyalty/database/package.json
 
-# Schema Prisma nécessaire pour les migrations au runtime
+# Schema Prisma nécessaire pour les migrations au runtime (Prisma cherche ./prisma par défaut)
 COPY --chown=fastify:nodejs packages/database/prisma ./prisma
 
 USER fastify

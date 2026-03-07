@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Page d'accueil du dashboard
  * - Stats en temps réel
@@ -25,6 +27,7 @@ interface Stats {
 }
 
 interface Business {
+  id: string;
   name: string;
   slug: string;
   logo_url: string | null;
@@ -74,7 +77,7 @@ export default function DashboardPage() {
   const [highlightQr, setHighlightQr] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  const registrationUrl = business?.slug ? `${APP_URL}/join/${business.slug}` : null;
+  const registrationUrl = business?.id ? `${APP_URL}/join/${business.id}` : null;
   const activeProgram = business?.programs?.find((p) => p.status === "ACTIVE");
   const settings = business?.settings_json ?? {};
 
@@ -181,8 +184,9 @@ export default function DashboardPage() {
                   )}
 
                   {activeProgram && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
-                      <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">Programme de fidélité</p>
+                      <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                         {activeProgram.config_json.threshold} tampons = {activeProgram.config_json.reward_label}
                       </span>

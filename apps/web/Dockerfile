@@ -18,7 +18,6 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules      ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 
 COPY packages/types/ ./packages/types/
 COPY apps/web/       ./apps/web/
@@ -43,9 +42,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 nextjs
 
-# Activer le mode standalone dans next.config.ts :
-#   output: 'standalone'
+# Avec outputFileTracingRoot, le standalone est à la racine du monorepo
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+# Les fichiers statiques et publics sont résolus relativement à /app/apps/web/server.js
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static     ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public           ./apps/web/public
 

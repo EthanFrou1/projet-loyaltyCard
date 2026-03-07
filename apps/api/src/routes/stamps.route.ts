@@ -9,6 +9,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { StampService } from "../services/stamp.service.js";
+import { GoogleWalletService } from "../services/wallet-google.service.js";
+import { AppleWalletService } from "../services/wallet-apple.service.js";
 
 // ─── Schémas Zod ──────────────────────────────────────────────────────────────
 
@@ -32,6 +34,8 @@ export async function stampsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   const stampService = new StampService();
+  const googleWalletService = new GoogleWalletService();
+  const appleWalletService = new AppleWalletService();
 
   // POST /customers/:id/stamp
   // Ajoute 1 tampon. Retourne l'état mis à jour + flag reward_unlocked.
@@ -53,6 +57,11 @@ export async function stampsRoutes(app: FastifyInstance) {
     if (!result) {
       return reply.status(404).send({ error: "NotFound", message: "Client ou programme non trouvé" });
     }
+
+    await Promise.allSettled([
+      googleWalletService.updateObject(request.user.business_id, params.data.id),
+      appleWalletService.refreshPassIfExists(request.user.business_id, params.data.id),
+    ]);
 
     return reply.send(result);
   });
@@ -77,6 +86,11 @@ export async function stampsRoutes(app: FastifyInstance) {
     if (!result) {
       return reply.status(400).send({ error: "BadRequest", message: "Pas de récompense disponible ou client non trouvé" });
     }
+
+    await Promise.allSettled([
+      googleWalletService.updateObject(request.user.business_id, params.data.id),
+      appleWalletService.refreshPassIfExists(request.user.business_id, params.data.id),
+    ]);
 
     return reply.send(result);
   });

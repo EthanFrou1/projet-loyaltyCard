@@ -77,7 +77,7 @@ export class CustomerService {
         skip,
         take: per_page,
         orderBy: { created_at: "desc" },
-        include: { program: { select: { name: true } } },
+        include: { program: { select: { name: true, config_json: true } } },
       }),
       prisma.customer.count({ where }),
     ]);
@@ -104,7 +104,7 @@ export class CustomerService {
         wallet_passes: {
           select: { platform: true, serial: true, last_version: true },
         },
-        program: { select: { name: true } },
+        program: { select: { name: true, config_json: true } },
       },
     });
 
@@ -139,9 +139,10 @@ export class CustomerService {
     point_count: number;
     created_at: Date;
     program_id?: string | null;
-    program?: { name: string } | null;
+    program?: { name: string; config_json?: unknown } | null;
   }) {
     const appUrl = process.env["APP_URL"] ?? "http://localhost:3000";
+    const threshold = this.extractStampThreshold(customer.program?.config_json);
     return {
       id: customer.id,
       name: customer.name,
@@ -153,6 +154,13 @@ export class CustomerService {
       created_at: customer.created_at.toISOString(),
       program_id: customer.program_id ?? null,
       program_name: customer.program?.name ?? null,
+      program_threshold: threshold,
     };
+  }
+
+  private extractStampThreshold(config: unknown): number | null {
+    if (!config || typeof config !== "object") return null;
+    const candidate = (config as { threshold?: unknown }).threshold;
+    return typeof candidate === "number" && Number.isFinite(candidate) ? candidate : null;
   }
 }

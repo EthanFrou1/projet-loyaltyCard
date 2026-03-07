@@ -16,6 +16,10 @@
 import fastifyJwt from "@fastify/jwt";
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 
+function isOwnerRole(role: string): boolean {
+  return role === "OWNER" || role === "ADMIN";
+}
+
 export async function registerJwt(app: FastifyInstance) {
   await app.register(fastifyJwt, {
     secret: process.env["JWT_SECRET"] ?? "dev-secret-change-me",
@@ -36,14 +40,31 @@ export async function registerJwt(app: FastifyInstance) {
       }
     }
   );
+
+  app.decorate(
+    "requireOwner",
+    async function (request: FastifyRequest, reply: FastifyReply) {
+      if (!isOwnerRole(request.user.role)) {
+        return reply.status(403).send({
+          error: "Forbidden",
+          message: "Acces reserve au proprietaire du salon.",
+        });
+      }
+    }
+  );
 }
 
 // Augmentation des types Fastify pour que TypeScript connaisse le décorateur
 declare module "fastify" {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    requireOwner: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
-  interface FastifyRequest {
+}
+
+// Typage du payload JWT via l'interface officielle @fastify/jwt
+declare module "@fastify/jwt" {
+  interface FastifyJWT {
     user: {
       sub: string;        // userId
       business_id: string;

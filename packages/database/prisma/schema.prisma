@@ -6,7 +6,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -104,7 +105,8 @@ model Business {
   id            String  @id @default(cuid())
   name          String
   slug          String  @unique // ex. "salon-marie-paris" — utilisé dans les URLs
-  logo_url      String? // URL R2 du logo nettoyé
+  logo_url           String? // URL R2 du logo nettoyé (icône header Wallet)
+  cover_photo_url    String? // URL R2 de la photo de l'établissement (strip Wallet)
   settings_json Json    @default("{}") // config libre (couleurs, textes wallet…)
   plan          Plan    @default(STARTER) // plan d'abonnement actif
   name_locked   Boolean @default(false)  // verrouillé après la 1ère sauvegarde du nom réel

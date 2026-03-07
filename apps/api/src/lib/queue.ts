@@ -8,19 +8,29 @@
  * En prod : Upstash Redis (REDIS_URL)
  */
 
-import { Queue } from "bullmq";
-import IORedis from "ioredis";
+import { Queue, type ConnectionOptions } from "bullmq";
 
-// Connexion Redis partagée (singleton)
-let redisConnection: IORedis | null = null;
-
-export function getRedisConnection(): IORedis {
-  if (!redisConnection) {
-    redisConnection = new IORedis(process.env["REDIS_URL"] ?? "redis://localhost:6379", {
+/** Parse une URL Redis en options BullMQ (évite le conflit de types ioredis/bullmq). */
+function parseRedisUrl(url: string): ConnectionOptions {
+  try {
+    const parsed = new URL(url);
+    return {
+      host: parsed.hostname || "localhost",
+      port: parseInt(parsed.port || "6379", 10),
+      password: parsed.password || undefined,
+      db: parseInt(parsed.pathname.slice(1) || "0", 10),
       maxRetriesPerRequest: null, // requis pour BullMQ
-    });
+    };
+  } catch {
+    return { host: "localhost", port: 6379, maxRetriesPerRequest: null };
   }
-  return redisConnection;
+}
+
+// Options de connexion partagées (BullMQ gère ses propres instances ioredis en interne)
+const redisOptions = parseRedisUrl(process.env["REDIS_URL"] ?? "redis://localhost:6379");
+
+export function getRedisConnection(): ConnectionOptions {
+  return redisOptions;
 }
 
 // Queue singleton pour les jobs IA
@@ -29,7 +39,7 @@ let aiQueue: Queue | null = null;
 export function getAiQueue(): Queue {
   if (!aiQueue) {
     aiQueue = new Queue("ai-jobs", {
-      connection: getRedisConnection(),
+      connection: redisOptions,
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: "exponential", delay: 2000 },

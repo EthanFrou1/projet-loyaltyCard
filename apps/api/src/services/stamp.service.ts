@@ -38,7 +38,7 @@ export class StampService {
 
     if (!customer || !program) return null;
 
-    const config = program.config_json as StampProgramConfig;
+    const config = program.config_json as unknown as StampProgramConfig;
     const threshold = config.threshold ?? 10;
 
     // Transaction atomique : créer la transaction + incrémenter le compteur
@@ -98,7 +98,7 @@ export class StampService {
 
     if (!customer || !program) return null;
 
-    const config = program.config_json as StampProgramConfig;
+    const config = program.config_json as unknown as StampProgramConfig;
     const threshold = config.threshold ?? 10;
 
     // Vérifier que la récompense est bien disponible

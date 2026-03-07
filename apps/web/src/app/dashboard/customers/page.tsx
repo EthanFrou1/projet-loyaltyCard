@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -91,7 +93,7 @@ export default function CustomersPage() {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <StampBadge count={customer.stamp_count} />
+                      <StampBadge count={customer.stamp_count} threshold={customer.program_threshold ?? 10} />
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(customer.created_at).toLocaleDateString("fr-FR")}
@@ -270,20 +272,18 @@ function Field({ label, required, optional, children }: {
   );
 }
 
-function StampBadge({ count }: { count: number }) {
-  const THRESHOLD = 10;
-  const rewardAvailable = count >= THRESHOLD;
+function StampBadge({ count, threshold }: { count: number; threshold: number }) {
+  const rewardAvailable = count >= threshold;
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
         rewardAvailable ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
       }`}
     >
-      {rewardAvailable ? "Récompense dispo" : `${count} / ${THRESHOLD}`}
+      {rewardAvailable ? "Récompense dispo" : `${count} / ${threshold}`}
     </span>
   );
 }
 
 const inputClass =
   "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
-

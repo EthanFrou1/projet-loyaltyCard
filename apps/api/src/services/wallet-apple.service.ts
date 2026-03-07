@@ -8,7 +8,38 @@ import { createHmac } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { prisma } from "@loyalty/database";
 import { PKPass } from "passkit-generator";
+import sharp from "sharp";
+import apn from "apn";
 import { StorageService } from "../lib/storage.js";
+
+// PNG 1×1 transparent — utilisé comme fallback si pas de logo établissement
+const FALLBACK_ICON = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7kL5EAAAAASUVORK5CYII=",
+  "base64"
+);
+
+/** Applique un masque circulaire à une image et retourne un PNG carré. */
+async function applyCircularMask(buffer: Buffer, size = 160): Promise<Buffer> {
+  const circle = Buffer.from(
+    `<svg><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}"/></svg>`
+  );
+  return sharp(buffer)
+    .resize(size, size, { fit: "cover", position: "centre" })
+    .composite([{ input: circle, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+}
+
+/** Télécharge une image depuis une URL et retourne un Buffer, ou null en cas d'erreur. */
+async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
 
 type ProgramConfig = {
   threshold?: number;
@@ -17,10 +48,72 @@ type ProgramConfig = {
   text_color?: "light" | "dark";
 };
 
+async function drawStampGridOnStrip(
+  stripBuffer: Buffer,
+  filled: number,
+  total: number
+): Promise<Buffer> {
+  const meta = await sharp(stripBuffer).metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  if (width <= 0 || height <= 0) return stripBuffer;
+
+  const count = Math.max(1, total);
+  const firstRowCount = Math.ceil(count / 2);
+  const secondRowCount = count - firstRowCount;
+  const circle = Math.max(26, Math.round(Math.min(width / 10.5, height / 2.9)));
+  const stroke = Math.max(2, Math.round(circle * 0.08));
+
+  const row1Y = Math.round(height * 0.36);
+  const row2Y = secondRowCount > 0 ? Math.round(height * 0.62) : row1Y;
+
+  const rowMargin = Math.round(width * 0.08);
+  const span = Math.max(width - rowMargin * 2, 1);
+
+  const rowXs = (rowCount: number) => {
+    if (rowCount <= 1) return [Math.round(width / 2)];
+    const step = span / (rowCount - 1);
+    return Array.from({ length: rowCount }, (_, i) => Math.round(rowMargin + i * step));
+  };
+
+  const x1 = rowXs(firstRowCount);
+  const x2 = rowXs(secondRowCount);
+
+  type Dot = { x: number; y: number; index: number };
+  const dots: Dot[] = [
+    ...x1.map((x, i) => ({ x, y: row1Y, index: i })),
+    ...x2.map((x, i) => ({ x, y: row2Y, index: firstRowCount + i })),
+  ];
+
+  const nodes = dots.map(({ x, y, index }) => {
+    const isFilled = index < filled;
+    if (!isFilled) {
+      return `<circle cx="${x}" cy="${y}" r="${circle / 2}" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.92)" stroke-width="${stroke}" />`;
+    }
+    const checkW = circle * 0.32;
+    const p1x = x - checkW * 0.6;
+    const p1y = y + checkW * 0.05;
+    const p2x = x - checkW * 0.15;
+    const p2y = y + checkW * 0.5;
+    const p3x = x + checkW * 0.7;
+    const p3y = y - checkW * 0.5;
+    return [
+      `<circle cx="${x}" cy="${y}" r="${circle / 2}" fill="rgba(255,255,255,0.95)" stroke="rgba(255,255,255,0.95)" stroke-width="${stroke}" />`,
+      `<path d="M ${p1x} ${p1y} L ${p2x} ${p2y} L ${p3x} ${p3y}" fill="none" stroke="rgba(20,20,20,0.92)" stroke-width="${Math.max(2, Math.round(circle * 0.11))}" stroke-linecap="round" stroke-linejoin="round" />`,
+    ].join("");
+  });
+
+  const overlay = Buffer.from(
+    `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${nodes.join("")}</svg>`
+  );
+
+  return sharp(stripBuffer).composite([{ input: overlay }]).png().toBuffer();
+}
+
 function hexToAppleRgb(hex: string): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   if (!result) return "rgb(26, 115, 232)";
-  return `rgb(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)})`;
+  return `rgb(${parseInt(result[1]!, 16)}, ${parseInt(result[2]!, 16)}, ${parseInt(result[3]!, 16)})`;
 }
 
 interface RegisterDeviceInput {
@@ -34,6 +127,11 @@ interface UnregisterDeviceInput {
   serial: string;
 }
 
+interface UpdatedSerialsResult {
+  serialNumbers: string[];
+  lastUpdated: string;
+}
+
 interface AppleWalletHealth {
   ready: boolean;
   checks: {
@@ -43,6 +141,8 @@ interface AppleWalletHealth {
     signer_key_exists: boolean;
     wwdr_exists: boolean;
     web_service_url_https: boolean;
+    web_service_url_real: boolean;
+    web_service_url_path: boolean;
   };
   issues: string[];
 }
@@ -50,7 +150,9 @@ interface AppleWalletHealth {
 export class AppleWalletService {
   private passTypeId = process.env["APPLE_PASS_TYPE_IDENTIFIER"] ?? "";
   private teamId = process.env["APPLE_TEAM_IDENTIFIER"] ?? "";
-  private webServiceUrl = process.env["APPLE_PASSKIT_WEB_SERVICE_URL"] ?? "";
+  private webServiceUrl = this.normalizeAppleWebServiceUrl(
+    process.env["APPLE_PASSKIT_WEB_SERVICE_URL"] ?? ""
+  );
 
   private signerCertPath = process.env["APPLE_SIGNER_CERT_PATH"] ?? "";
   private signerKeyPath = process.env["APPLE_SIGNER_KEY_PATH"] ?? "";
@@ -61,6 +163,8 @@ export class AppleWalletService {
 
   private appUrl = process.env["APP_URL"] ?? "http://localhost:3000";
   private storage = new StorageService();
+  private apnsProvider: apn.Provider | null = null;
+  private apnsUseProduction = process.env["APPLE_APNS_PRODUCTION"] === "true";
 
   /**
    * Génère un .pkpass pour un client et le stocke sur R2.
@@ -68,7 +172,10 @@ export class AppleWalletService {
   async createPass(businessId: string, customerId: string) {
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, business_id: businessId },
-      include: { business: true, program: true },
+      include: {
+        business: { select: { id: true, name: true, logo_url: true, cover_photo_url: true } },
+        program: true,
+      },
     });
 
     if (!customer) throw new Error("Client non trouvé");
@@ -110,31 +217,25 @@ export class AppleWalletService {
 
     pass.type = "storeCard";
 
-    // Header: compteur de tampons (haut droite, compact)
+    const stampCount = customer.stamp_count;
+    const filledCount = Math.min(stampCount, threshold);
+
+    // Header (haut droite) : progression X/Y
     pass.headerFields.push({
-      key: "stamps_header",
-      label: "TAMPONS",
-      value: `${customer.stamp_count} / ${threshold}`,
-    });
-
-    // Primary: représentation visuelle des tampons (gros)
-    const filled = "●".repeat(Math.min(customer.stamp_count, threshold));
-    const empty  = "○".repeat(Math.max(0, threshold - customer.stamp_count));
-    pass.primaryFields.push({
-      key: "stamps_visual",
+      key: "stamps_progress",
       label: "",
-      value: `${filled}${empty}`,
+      value: `${filledCount}/${threshold}`,
+      textAlignment: "PKTextAlignmentRight",
     });
 
-    // Secondary: nom du programme (sans libellé)
+    // Secondary : programme (gauche) + récompense (droite)
     pass.secondaryFields.push({
       key: "program",
-      label: "",
+      label: "PROGRAMME",
       value: programName,
     });
 
-    // Auxiliary: récompense
-    pass.auxiliaryFields.push({
+    pass.secondaryFields.push({
       key: "reward",
       label: "RÉCOMPENSE",
       value: rewardLabel,
@@ -161,16 +262,31 @@ export class AppleWalletService {
 
     pass.setBarcodes(`${this.appUrl}/scan/${customer.id}`);
 
-    // Apple exige un icon. On met un PNG minimal par défaut.
-    const icon = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7kL5EAAAAASUVORK5CYII=",
-      "base64"
-    );
+    // Logo : icône circulaire dans le header
+    const rawLogoBuffer = customer.business.logo_url
+      ? (await fetchImageBuffer(customer.business.logo_url) ?? FALLBACK_ICON)
+      : FALLBACK_ICON;
 
-    pass.addBuffer("icon.png", icon);
-    pass.addBuffer("icon@2x.png", icon);
-    pass.addBuffer("logo.png", icon);
-    pass.addBuffer("logo@2x.png", icon);
+    const logoBuffer = rawLogoBuffer === FALLBACK_ICON
+      ? rawLogoBuffer
+      : await applyCircularMask(rawLogoBuffer).catch(() => rawLogoBuffer);
+
+    pass.addBuffer("icon.png", logoBuffer);
+    pass.addBuffer("icon@2x.png", logoBuffer);
+    pass.addBuffer("logo.png", logoBuffer);
+    pass.addBuffer("logo@2x.png", logoBuffer);
+
+    // Strip : photo de l'établissement (ou logo en fallback)
+    const stripSource = customer.business.cover_photo_url ?? customer.business.logo_url;
+    if (stripSource) {
+      const stripBuffer = await fetchImageBuffer(stripSource);
+      if (stripBuffer) {
+        const stripWithStamps = await drawStampGridOnStrip(stripBuffer, filledCount, threshold)
+          .catch(() => stripBuffer);
+        pass.addBuffer("strip.png", stripWithStamps);
+        pass.addBuffer("strip@2x.png", stripWithStamps);
+      }
+    }
 
     const buffer = pass.getAsBuffer();
     const storageKey = this.getStorageKey(businessId, customerId, serial);
@@ -200,6 +316,20 @@ export class AppleWalletService {
     });
 
     return { serial, last_version: walletPass.last_version };
+  }
+
+  /**
+   * Régénère le pass seulement s'il existe déjà côté Apple Wallet.
+   * Évite de créer un pass inutile pour les clients qui ne l'ont pas ajouté.
+   */
+  async refreshPassIfExists(businessId: string, customerId: string): Promise<void> {
+    const existing = await prisma.walletPass.findFirst({
+      where: { business_id: businessId, customer_id: customerId, platform: "APPLE" },
+      select: { id: true },
+    });
+    if (!existing) return;
+    await this.createPass(businessId, customerId);
+    await this.pushUpdate(customerId);
   }
 
   /**
@@ -294,21 +424,86 @@ export class AppleWalletService {
   }
 
   /**
-   * Envoie une notification APNs pour forcer le refresh du pass sur iOS.
-   * TODO : implémenter avec `apn` ou `node-apn`
+   * Retourne les serials Apple mis à jour pour un device (web service PassKit).
    */
+  async getUpdatedSerialsForDevice(
+    deviceLibraryId: string,
+    passesUpdatedSince?: number
+  ): Promise<UpdatedSerialsResult> {
+    const deviceLinks = await prisma.appleDevice.findMany({
+      where: { device_library_id: deviceLibraryId },
+      select: { customer_id: true },
+    });
+
+    const customerIds = [...new Set(deviceLinks.map((d) => d.customer_id))];
+    if (customerIds.length === 0) {
+      return { serialNumbers: [], lastUpdated: String(passesUpdatedSince ?? 0) };
+    }
+
+    const passes = await prisma.walletPass.findMany({
+      where: {
+        platform: "APPLE",
+        customer_id: { in: customerIds },
+        ...(typeof passesUpdatedSince === "number"
+          ? { last_version: { gt: passesUpdatedSince } }
+          : {}),
+      },
+      select: { serial: true, last_version: true },
+      orderBy: { last_version: "asc" },
+    });
+
+    const maxVersion = passes.reduce(
+      (max, p) => (p.last_version > max ? p.last_version : max),
+      passesUpdatedSince ?? 0
+    );
+
+    return {
+      serialNumbers: passes.map((p) => p.serial),
+      lastUpdated: String(maxVersion),
+    };
+  }
+
+  /** Envoie une notification APNs pour forcer le refresh du pass sur iOS. */
   async pushUpdate(customerId: string) {
     const devices = await prisma.appleDevice.findMany({
       where: { customer_id: customerId },
     });
 
-    for (const _device of devices) {
-      // TODO : envoyer une notification APNs vide sur device.push_token
-      // iOS appellera ensuite GET /wallet/apple/passes/:passTypeId/:serial
+    if (devices.length === 0) return;
+    const provider = this.getApnsProvider();
+    if (!provider) return;
+
+    const tokenList = devices.map((d) => d.push_token).filter(Boolean);
+    if (tokenList.length === 0) return;
+
+    const note = new apn.Notification();
+    note.topic = this.passTypeId;
+    note.contentAvailable = true;
+    note.priority = 5;
+    note.expiry = Math.floor(Date.now() / 1000) + 60;
+
+    const result = await provider.send(note, tokenList);
+    if (result.failed.length > 0) {
+      for (const failed of result.failed) {
+        const token = typeof failed.device === "string"
+          ? failed.device
+          : (failed.device as { token?: string }).token;
+        const reason = failed.response?.reason ?? "";
+        if (token && ["Unregistered", "BadDeviceToken", "DeviceTokenNotForTopic"].includes(reason)) {
+          await prisma.appleDevice.deleteMany({
+            where: { customer_id: customerId, push_token: token },
+          });
+        }
+      }
     }
   }
 
   getHealth(): AppleWalletHealth {
+    const webServiceUrlLooksReal = Boolean(this.webServiceUrl)
+      && !this.webServiceUrl.includes("yourapp.com")
+      && !this.webServiceUrl.includes("localhost");
+    const webServiceUrlHasExpectedPath = this.webServiceUrl.endsWith("/api/v1/wallet/apple");
+
     const checks = {
       pass_type_identifier:
         Boolean(this.passTypeId) && !this.passTypeId.includes("yourcompany"),
@@ -322,6 +517,10 @@ export class AppleWalletService {
         Boolean(this.wwdrCertPath) && existsSync(this.wwdrCertPath),
       web_service_url_https:
         this.webServiceUrl.startsWith("https://"),
+      web_service_url_real:
+        webServiceUrlLooksReal,
+      web_service_url_path:
+        webServiceUrlHasExpectedPath,
     };
 
     const issues: string[] = [];
@@ -343,6 +542,12 @@ export class AppleWalletService {
     if (!checks.web_service_url_https) {
       issues.push("APPLE_PASSKIT_WEB_SERVICE_URL doit être en HTTPS public.");
     }
+    if (!checks.web_service_url_real) {
+      issues.push("APPLE_PASSKIT_WEB_SERVICE_URL semble être un placeholder/localhost.");
+    }
+    if (!checks.web_service_url_path) {
+      issues.push("APPLE_PASSKIT_WEB_SERVICE_URL doit finir par /api/v1/wallet/apple.");
+    }
 
     return {
       ready: issues.length === 0,
@@ -358,8 +563,37 @@ export class AppleWalletService {
       .slice(0, 32);
   }
 
+  private getApnsProvider(): apn.Provider | null {
+    if (this.apnsProvider) return this.apnsProvider;
+    if (!this.passTypeId) return null;
+    if (!this.signerCertPath || !existsSync(this.signerCertPath)) return null;
+    if (!this.signerKeyPath || !existsSync(this.signerKeyPath)) return null;
+
+    this.apnsProvider = new apn.Provider({
+      cert: this.signerCertPath,
+      key: this.signerKeyPath,
+      passphrase: this.signerKeyPassphrase || undefined,
+      production: this.apnsUseProduction,
+    });
+    return this.apnsProvider;
+  }
+
   private getStorageKey(businessId: string, customerId: string, serial: string): string {
     return `wallet/apple/${businessId}/${customerId}/${serial}.pkpass`;
+  }
+
+  private normalizeAppleWebServiceUrl(raw: string): string {
+    const value = raw.trim().replace(/\/+$/, "");
+    if (!value) return "";
+    if (value.endsWith("/api/v1/wallet/apple")) return value;
+    if (value.endsWith("/wallet/apple")) return `${value.slice(0, -"/wallet/apple".length)}/api/v1/wallet/apple`;
+    try {
+      const url = new URL(value);
+      if (!url.pathname || url.pathname === "/") return `${value}/api/v1/wallet/apple`;
+    } catch {
+      return value;
+    }
+    return value;
   }
 
   private getCertificates() {
@@ -395,4 +629,3 @@ export class AppleWalletService {
     };
   }
 }
-
