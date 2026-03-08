@@ -40,6 +40,7 @@ export default function JoinPage() {
   const [business, setBusiness] = useState<BusinessInfo | null>(null);
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [setupBlocked, setSetupBlocked] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -75,8 +76,17 @@ export default function JoinPage() {
       : `${API_URL}/api/v1/join/${slug}`;
 
     fetch(joinUrl)
-      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
-      .then((data: BusinessInfo) => {
+      .then(async (res) => {
+        if (res.ok) return res.json() as Promise<BusinessInfo>;
+        const json = await res.json().catch(() => null) as { code?: string; message?: string } | null;
+        if (json?.code === "BUSINESS_SETUP_REQUIRED") {
+          setSetupBlocked(json.message ?? "Ce programme n'est pas encore disponible.");
+          return null;
+        }
+        throw new Error(String(res.status));
+      })
+      .then((data: BusinessInfo | null) => {
+        if (!data) return;
         setBusiness(data);
         const ids = new Set((data.programs ?? []).map((p) => p.id));
         if (presetProgramId && ids.has(presetProgramId)) {
@@ -119,6 +129,10 @@ export default function JoinPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (data?.code === "BUSINESS_SETUP_REQUIRED") {
+          setError("Le commerçant doit d'abord finaliser son premier programme de fidélité.");
+          return;
+        }
         setError(data.message ?? "Une erreur est survenue.");
         return;
       }
@@ -139,6 +153,20 @@ export default function JoinPage() {
           <h1 className="text-xl font-bold text-gray-900">Établissement introuvable</h1>
           <p className="text-sm text-gray-500 mt-2">
             Ce lien n'est pas valide. Demandez le QR code à votre commerçant.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (setupBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+          <h1 className="text-xl font-bold text-amber-900">Programme bientôt disponible</h1>
+          <p className="text-sm text-amber-800 mt-2">{setupBlocked}</p>
+          <p className="text-xs text-amber-700 mt-3">
+            Revenez dans quelques minutes ou contactez l'établissement.
           </p>
         </div>
       </div>
@@ -313,4 +341,3 @@ export default function JoinPage() {
 
 const inputClass =
   "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
-

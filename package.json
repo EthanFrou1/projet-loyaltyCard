@@ -1,14 +1,17 @@
 {
-  "name": "loyalty-card-platform",
+  "name": "fidelitepro-plus",
   "private": true,
   "version": "0.1.0",
-  "description": "Plateforme de carte de fidélité digitale (Apple Wallet + Google Wallet)",
+  "description": "FidelitePro+ - plateforme de carte de fidelite digitale (Apple Wallet + Google Wallet)",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "npm run dev:up && turbo run dev --filter=@loyalty/api --filter=@loyalty/web",
+    "dev:up": "docker compose up -d postgres redis",
+    "dev:down": "docker compose stop postgres redis",
+    "dev:docker": "docker compose up -d",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

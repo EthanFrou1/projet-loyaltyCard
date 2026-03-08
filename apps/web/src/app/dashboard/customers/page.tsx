@@ -7,7 +7,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Search, UserPlus, X } from "lucide-react";
-import { apiClient } from "@/lib/api-client";
+import Link from "next/link";
+import { ApiClientError, apiClient } from "@/lib/api-client";
 import type { PaginatedResponse, CustomerResponse } from "@loyalty/types";
 
 export default function CustomersPage() {
@@ -23,10 +24,11 @@ export default function CustomersPage() {
     }
   }, [searchParams]);
 
-  const { data, isLoading, mutate } = useSWR<PaginatedResponse<CustomerResponse>>(
+  const { data, isLoading, error, mutate } = useSWR<PaginatedResponse<CustomerResponse>>(
     `/customers?search=${search}&page=${page}&per_page=20`,
     (url: string) => apiClient.get<PaginatedResponse<CustomerResponse>>(url)
   );
+  const setupBlocked = error instanceof ApiClientError && error.code === "BUSINESS_SETUP_REQUIRED";
 
   return (
     <div className="space-y-6">
@@ -34,12 +36,22 @@ export default function CustomersPage() {
         <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
         <button
           onClick={() => setShowModal(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          disabled={setupBlocked}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <UserPlus className="h-4 w-4" />
           Nouveau client
         </button>
       </div>
+
+      {setupBlocked && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
+          <p>Créez d'abord votre premier programme pour pouvoir ajouter des clients.</p>
+          <Link href="/dashboard/programs?new=1" className="font-semibold underline underline-offset-2">
+            Configurer maintenant
+          </Link>
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -167,7 +179,11 @@ function CreateCustomerModal({
       });
       onCreated();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur lors de la création.");
+      if (err instanceof ApiClientError && err.code === "BUSINESS_SETUP_REQUIRED") {
+        setError("Créez d'abord votre premier programme de fidélité dans l'onglet Programmes.");
+      } else {
+        setError(err instanceof Error ? err.message : "Erreur lors de la création.");
+      }
     } finally {
       setLoading(false);
     }

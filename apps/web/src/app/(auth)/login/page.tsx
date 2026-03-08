@@ -1,11 +1,6 @@
-/**
- * Page de connexion
- * Formulaire email + mot de passe → appel POST /api/v1/auth/login
- * Stocke les tokens en localStorage (ou cookie httpOnly en prod)
- */
-"use client";
+﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
@@ -22,6 +17,11 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    document.body.classList.add("no-shell-pad");
+    return () => document.body.classList.remove("no-shell-pad");
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -29,77 +29,135 @@ export default function LoginPage() {
 
     try {
       const data = await apiClient.post<LoginResponse>("/auth/login", { email, password });
-      // Stocker le token d'accès
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
       router.push("/dashboard");
     } catch {
-      setError("Email ou mot de passe incorrect");
+      setError("Email ou mot de passe incorrect.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Connexion</h1>
-          <p className="mt-2 text-sm text-gray-500">Accédez à votre tableau de bord fidélité</p>
+    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(120deg, rgba(15,23,42,0.92), rgba(30,41,59,0.75)), url('https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1800&q=80')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+      <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl animate-pulse" />
+      <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
+
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl items-center px-4 py-0 sm:px-6 sm:py-10">
+        <div className="hidden w-1/2 pr-12 lg:block">
+          <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-white">
+            FidélitéPro+
+          </p>
+          <h1 className="mt-5 text-4xl font-bold leading-tight text-white">
+            Transformez chaque visite en client fidélité.
+          </h1>
+          <p className="mt-4 max-w-md text-sm text-slate-200">
+            Gérez vos programmes de fidélité, scans et cartes Wallet depuis une interface simple.
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-3 py-2 border"
-            />
+        <div className="w-full lg:w-1/2">
+          <div className="mb-4 lg:hidden">
+            <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-white">
+              FidélitéPro+
+            </p>
+            <h1 className="mt-3 text-3xl font-bold leading-tight text-white">Transformez chaque visite en client fidélité.</h1>
+            <p className="mt-2 max-w-md text-sm text-slate-200">
+              Gérez vos programmes de fidélité, scans et cartes Wallet depuis une interface simple.
+            </p>
           </div>
+          <div className="mx-auto w-full max-w-md rounded-2xl border border-white/20 bg-white/90 p-8 shadow-2xl backdrop-blur">
+            <h2 className="text-2xl font-bold text-slate-900">Connexion</h2>
+            <p className="mt-1 text-sm text-slate-500">Accédez à votre espace FidélitéPro+.</p>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Mot de passe
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm px-3 py-2 border"
-            />
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <Field label="Email">
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+
+              <Field label="Mot de passe">
+                <PasswordInput
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </Field>
+
+              {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? "Connexion..." : "Se connecter"}
+              </button>
+            </form>
+
+            <p className="mt-5 text-center text-sm text-slate-500">
+              Pas encore de compte ?{" "}
+              <Link href="/setup" className="font-semibold text-blue-600 hover:underline">
+                Créer un compte
+              </Link>
+            </p>
           </div>
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 focus:outline-none disabled:opacity-50"
-          >
-            {loading ? "Connexion…" : "Se connecter"}
-          </button>
-        </form>
-
-        <div className="pt-4 border-t border-gray-100 text-center space-y-1">
-          <p className="text-sm text-gray-500">Pas encore de compte ?</p>
-          <Link
-            href="/setup"
-            className="inline-block w-full py-2 px-4 border-2 border-gray-200 rounded-md text-sm font-medium text-gray-700 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors text-center"
-          >
-            Créer un compte →
-          </Link>
         </div>
       </div>
     </div>
   );
 }
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function PasswordInput({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const [show, setShow] = useState(false);
+
+  return (
+    <div className="relative">
+      <input id={id} type={show ? "text" : "password"} required value={value} onChange={onChange} className={`${inputClass} pr-24`} />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        className="absolute inset-y-0 right-2 my-auto h-7 rounded-md px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+        aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+      >
+        {show ? "Masquer" : "Afficher"}
+      </button>
+    </div>
+  );
+}
+
+const inputClass =
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200";

@@ -591,58 +591,67 @@ export default function ProgramsPage() {
           )}
 
           {/* ── Résumé programme sélectionné ── */}
-          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                <Stamp className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="font-semibold text-gray-900 text-lg">{selectedProgram.name}</h2>
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    v{selectedProgram.version} — Actif
-                  </span>
+          <div className="border-b border-gray-100 px-4 py-4 sm:px-6 sm:py-5">
+            <div className="flex items-start gap-3 sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 sm:h-11 sm:w-11">
+                  <Stamp className="h-4 w-4 text-blue-600 sm:h-5 sm:w-5" />
                 </div>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {selectedProgram.config_json.threshold ?? 10} tampons →{" "}
-                  <strong className="text-gray-700">{selectedProgram.config_json.reward_label ?? "Récompense"}</strong>
-                </p>
+                <div className="min-w-0">
+                  <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <h2 className="text-base font-semibold text-gray-900 sm:text-lg">{selectedProgram.name}</h2>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                      v{selectedProgram.version} — Actif
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {selectedProgram.config_json.threshold ?? 10} tampons —{" "}
+                    <strong className="text-gray-700">{selectedProgram.config_json.reward_label ?? "Récompense"}</strong>
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400 sm:hidden">
+                    Créé le {new Date(selectedProgram.created_at).toLocaleDateString("fr-FR")}
+                  </p>
+                </div>
               </div>
+              <p className="hidden shrink-0 text-xs text-gray-400 sm:block">
+                Créé le {new Date(selectedProgram.created_at).toLocaleDateString("fr-FR")}
+              </p>
             </div>
-            <p className="text-xs text-gray-400 shrink-0">
-              Créé le {new Date(selectedProgram.created_at).toLocaleDateString("fr-FR")}
-            </p>
           </div>
 
           {/* ── Sous-onglets ── */}
-          <div className="flex border-b border-gray-100 px-6">
-            {(["apercu", "carte", "parametres", "historique"] as const).map((tab) => {
-              const config = {
-                apercu:     { label: "Aperçu",      icon: BarChart2  },
-                carte:      { label: "Carte Wallet", icon: Smartphone },
-                parametres: { label: "Paramètres",  icon: Settings   },
-                historique: {
-                  label: `Historique${programHistory.length > 0 ? ` (${programHistory.length})` : ""}`,
-                  icon: Clock,
-                },
-              };
-              const { label, icon: Icon } = config[tab];
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setSubTab(tab)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    subTab === tab
-                      ? "border-blue-600 text-blue-700"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                </button>
-              );
-            })}
+          <div className="border-b border-gray-100 px-2 sm:px-6">
+            <div className="w-full overflow-x-auto overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
+              <div className="flex w-max">
+              {(["apercu", "carte", "parametres", "historique"] as const).map((tab) => {
+                const config = {
+                  apercu:     { label: "Aperçu",      icon: BarChart2  },
+                  carte:      { label: "Carte Wallet", icon: Smartphone },
+                  parametres: { label: "Paramètres",  icon: Settings   },
+                  historique: {
+                    label: `Historique${programHistory.length > 0 ? ` (${programHistory.length})` : ""}`,
+                    icon: Clock,
+                  },
+                };
+                const { label, icon: Icon } = config[tab];
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setSubTab(tab)}
+                    className={`flex flex-none min-w-[110px] flex-col items-center gap-1 whitespace-nowrap px-3 py-3 text-xs font-medium border-b-2 transition-colors sm:min-w-0 sm:flex-row sm:gap-2 sm:px-4 sm:text-sm ${
+                      subTab === tab
+                        ? "border-blue-600 text-blue-700"
+                        : "border-transparent text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+              </div>
+            </div>
           </div>
 
           {/* ── Contenu des sous-onglets ── */}

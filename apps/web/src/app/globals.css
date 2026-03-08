@@ -24,6 +24,11 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+body.no-shell-pad {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 @media (min-width: 768px) {
   body {
     padding-top: 0;

@@ -10,6 +10,20 @@
 const API_URL = process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3001";
 const API_PREFIX = "/api/v1";
 
+export class ApiClientError extends Error {
+  status: number;
+  code?: string;
+  required_step?: string;
+
+  constructor(message: string, status: number, code?: string, required_step?: string) {
+    super(message);
+    this.name = "ApiClientError";
+    this.status = status;
+    this.code = code;
+    this.required_step = required_step;
+  }
+}
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("access_token");
@@ -45,7 +59,12 @@ async function request<T = unknown>(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message ?? `HTTP ${res.status}`);
+    throw new ApiClientError(
+      error.message ?? `HTTP ${res.status}`,
+      res.status,
+      typeof error.code === "string" ? error.code : undefined,
+      typeof error.required_step === "string" ? error.required_step : undefined
+    );
   }
 
   return res.json() as Promise<T>;
@@ -74,7 +93,12 @@ async function requestForm<T = unknown>(path: string, form: FormData): Promise<T
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message ?? `HTTP ${res.status}`);
+    throw new ApiClientError(
+      error.message ?? `HTTP ${res.status}`,
+      res.status,
+      typeof error.code === "string" ? error.code : undefined,
+      typeof error.required_step === "string" ? error.required_step : undefined
+    );
   }
 
   return res.json() as Promise<T>;

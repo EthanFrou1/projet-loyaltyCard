@@ -34,6 +34,7 @@ export default function ScanPage() {
   const [error, setError]     = useState<string | null>(null);
   const [action, setAction]   = useState<"stamp" | "redeem" | null>(null);
   const [result, setResult]   = useState<{ ok: boolean; message: string } | null>(null);
+  const [setupBlocked, setSetupBlocked] = useState<string | null>(null);
 
   // Charger les infos du client
   useEffect(() => {
@@ -59,7 +60,14 @@ export default function ScanPage() {
           router.push(`/login?redirect=/scan/${id}`);
           return;
         }
-        if (!customerRes.ok) throw new Error("Client non trouvé");
+        if (!customerRes.ok) {
+          const json = await customerRes.json().catch(() => null) as { code?: string; message?: string } | null;
+          if (json?.code === "BUSINESS_SETUP_REQUIRED") {
+            setSetupBlocked(json.message ?? "Configuration incomplète.");
+            return;
+          }
+          throw new Error(json?.message ?? "Client non trouvé");
+        }
 
         const customer = await customerRes.json();
         const business = businessRes.ok ? await businessRes.json() : null;
@@ -67,6 +75,9 @@ export default function ScanPage() {
         const activeProgram = business?.programs?.find(
           (p: { status: string }) => p.status === "ACTIVE"
         );
+        if (!activeProgram) {
+          setSetupBlocked("Aucun programme actif. Créez d'abord votre premier programme.");
+        }
 
         setData({
           id: customer.id,
@@ -99,7 +110,13 @@ export default function ScanPage() {
         body: JSON.stringify({ program_id: data.program.id }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.message ?? "Erreur");
+      if (!res.ok) {
+        if (json?.code === "BUSINESS_SETUP_REQUIRED") {
+          setSetupBlocked(json.message ?? "Aucun programme actif.");
+          throw new Error("Créez d'abord votre premier programme.");
+        }
+        throw new Error(json.message ?? "Erreur");
+      }
 
       const newCount = data.stamp_count + 1;
       setData((d) => d ? { ...d, stamp_count: newCount } : d);
@@ -129,7 +146,13 @@ export default function ScanPage() {
         body: JSON.stringify({ program_id: data.program.id }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.message ?? "Erreur");
+      if (!res.ok) {
+        if (json?.code === "BUSINESS_SETUP_REQUIRED") {
+          setSetupBlocked(json.message ?? "Aucun programme actif.");
+          throw new Error("Créez d'abord votre premier programme.");
+        }
+        throw new Error(json.message ?? "Erreur");
+      }
 
       setData((d) => d ? { ...d, stamp_count: 0 } : d);
       setResult({ ok: true, message: "Récompense consommée. Compteur remis à 0 ✓" });
@@ -240,9 +263,20 @@ export default function ScanPage() {
 
         {/* Actions */}
         <div className="space-y-3">
+          {setupBlocked && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p>{setupBlocked}</p>
+              <button
+                onClick={() => router.push("/dashboard/programs?new=1")}
+                className="mt-2 font-semibold underline underline-offset-2"
+              >
+                Configurer le programme
+              </button>
+            </div>
+          )}
           <button
             onClick={handleStamp}
-            disabled={action !== null || rewardAvailable}
+            disabled={action !== null || rewardAvailable || !!setupBlocked}
             className="w-full py-4 bg-blue-600 text-white text-base font-semibold rounded-2xl hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
             <Stamp className="h-5 w-5" />
@@ -252,7 +286,7 @@ export default function ScanPage() {
           {rewardAvailable && (
             <button
               onClick={handleRedeem}
-              disabled={action !== null}
+              disabled={action !== null || !!setupBlocked}
               className="w-full py-4 bg-green-600 text-white text-base font-semibold rounded-2xl hover:bg-green-700 disabled:opacity-50 transition-colors"
             >
               {action === "redeem" ? "Traitement…" : "🎁 Utiliser la récompense"}

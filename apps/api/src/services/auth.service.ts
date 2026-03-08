@@ -75,6 +75,17 @@ export class AuthService {
 
     if (!user) return null;
 
+    const activeProgramsCount = await prisma.program.count({
+      where: {
+        business_id: user.business.id,
+        status: "ACTIVE",
+      },
+    });
+    const businessNameSet = user.business.name.trim().length >= 2;
+    const missingSteps: string[] = [];
+    if (!businessNameSet) missingSteps.push("business_profile");
+    if (activeProgramsCount === 0) missingSteps.push("first_program");
+
     return {
       id: user.id,
       email: user.email,
@@ -86,6 +97,12 @@ export class AuthService {
         logo_url: user.business.logo_url,
         plan: user.business.plan,
         settings: user.business.settings_json,
+      },
+      setup: {
+        business_name_set: businessNameSet,
+        has_active_program: activeProgramsCount > 0,
+        requires_onboarding: missingSteps.length > 0,
+        missing_steps: missingSteps,
       },
     };
   }

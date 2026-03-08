@@ -1,4 +1,4 @@
-# LoyaltyCard Platform
+# FidélitéPro+
 
 Plateforme SaaS de carte de fidélité digitale — ajout en Apple Wallet et Google Wallet.
 
@@ -70,9 +70,9 @@ L'application est disponible sur :
 - **API** → http://localhost:3001
 - **Healthcheck** → http://localhost:3001/health
 
-### Option B — Développement local
+### Option B — Développement local (workflow recommandé en équipe)
 
-**Prérequis :** Node.js 20+, PostgreSQL, Redis
+**Prérequis :** Node.js 20+ et Docker Desktop
 
 ```bash
 # 1. Installer les dépendances
@@ -81,12 +81,18 @@ npm install
 # 2. Copier et remplir les variables d'environnement
 cp .env.example .env
 
-# 3. Générer le client Prisma et migrer la DB
-npm run db:generate
-npm run db:migrate
-
-# 4. Démarrer en dev (api + web en parallèle via Turborepo)
+# 3. Démarrer en dev (postgres + redis en containers, api + web en local)
+# Le script:
+# - démarre postgres et redis via Docker
+# - build automatiquement les dépendances workspace (@loyalty/database)
+# - lance api + web avec hot reload
 npm run dev
+```
+
+Si tu as déjà lancé toute la stack Docker (`docker compose up -d`), arrête `web/api/worker` avant:
+
+```bash
+docker compose stop web api worker
 ```
 
 ---
@@ -149,6 +155,11 @@ docker compose down                   # Arrêter
 docker compose down -v                # Arrêter + supprimer les volumes
 docker compose logs -f api            # Logs API en temps réel
 docker compose exec postgres psql -U loyalty loyalty_db  # Shell PostgreSQL
+
+# Workflow dev local (recommandé)
+npm run dev                           # Start postgres+redis (Docker) + api+web (local)
+npm run dev:down                      # Stop postgres+redis
+npm run dev:docker                    # Start toute la stack en Docker
 ```
 
 ---
@@ -178,3 +189,4 @@ Crédits IA : +100 générations = 5 € · +500 générations = 20 €
 - [ ] Push APNs Apple (mise à jour automatique du pass)
 - [ ] Stripe — abonnements et crédits IA
 - [ ] Stats dashboard (visites/mois, récompenses délivrées)
+

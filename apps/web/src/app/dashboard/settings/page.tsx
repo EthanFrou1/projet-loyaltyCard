@@ -106,7 +106,7 @@ export default function AccountSettingsPage() {
       setNewStaffPassword("");
       await loadTeam();
     } catch (err) {
-      setTeamError(err instanceof Error ? err.message : "Erreur creation staff.");
+      setTeamError(err instanceof Error ? err.message : "Erreur création staff.");
     } finally {
       setAddingStaff(false);
     }
@@ -363,4 +363,3 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
     </div>
   );
 }
-

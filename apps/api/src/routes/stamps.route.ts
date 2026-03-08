@@ -8,6 +8,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { prisma } from "@loyalty/database";
 import { StampService } from "../services/stamp.service.js";
 import { GoogleWalletService } from "../services/wallet-google.service.js";
 import { AppleWalletService } from "../services/wallet-apple.service.js";
@@ -37,6 +38,14 @@ export async function stampsRoutes(app: FastifyInstance) {
   const googleWalletService = new GoogleWalletService();
   const appleWalletService = new AppleWalletService();
 
+  async function ensureBusinessHasActiveProgram(businessId: string) {
+    const activeProgram = await prisma.program.findFirst({
+      where: { business_id: businessId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    return Boolean(activeProgram);
+  }
+
   // POST /customers/:id/stamp
   // Ajoute 1 tampon. Retourne l'état mis à jour + flag reward_unlocked.
   app.post("/:id/stamp", async (request, reply) => {
@@ -45,6 +54,16 @@ export async function stampsRoutes(app: FastifyInstance) {
 
     if (!params.success || !body.success) {
       return reply.status(400).send({ error: "ValidationError", message: "Paramètres invalides" });
+    }
+
+    const hasActiveProgram = await ensureBusinessHasActiveProgram(request.user.business_id);
+    if (!hasActiveProgram) {
+      return reply.status(409).send({
+        error: "BusinessSetupRequired",
+        code: "BUSINESS_SETUP_REQUIRED",
+        message: "Aucun programme actif. Créez d'abord votre premier programme de fidélité.",
+        required_step: "first_program",
+      });
     }
 
     const result = await stampService.addStamp(
@@ -74,6 +93,16 @@ export async function stampsRoutes(app: FastifyInstance) {
 
     if (!params.success || !body.success) {
       return reply.status(400).send({ error: "ValidationError", message: "Paramètres invalides" });
+    }
+
+    const hasActiveProgram = await ensureBusinessHasActiveProgram(request.user.business_id);
+    if (!hasActiveProgram) {
+      return reply.status(409).send({
+        error: "BusinessSetupRequired",
+        code: "BUSINESS_SETUP_REQUIRED",
+        message: "Aucun programme actif. Créez d'abord votre premier programme de fidélité.",
+        required_step: "first_program",
+      });
     }
 
     const result = await stampService.redeemReward(

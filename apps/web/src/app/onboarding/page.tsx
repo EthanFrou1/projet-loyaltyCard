@@ -28,6 +28,8 @@ type Step = 1 | 2 | 3;
 interface BusinessData {
   id: string;
   name: string;
+  logo_url?: string | null;
+  cover_photo_url?: string | null;
   programs: Array<{ id: string; config_json: Record<string, unknown> }>;
 }
 
@@ -74,6 +76,10 @@ export default function OnboardingPage() {
   const [logoUploading, setLogoUploading]     = useState(false);
   const [logoPreview, setLogoPreview]         = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [selectedCoverUrl, setSelectedCoverUrl] = useState<string | null>(null);
+  const [coverUploading, setCoverUploading]     = useState(false);
+  const [coverPreview, setCoverPreview]         = useState<string | null>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   // ── Étape 3 : programme ──────────────────────────────────────────────────
   const [stampThreshold, setStampThreshold] = useState("10");
@@ -96,6 +102,8 @@ export default function OnboardingPage() {
         if (data.name && data.name !== "Mon établissement") {
           setBusinessName(data.name);
         }
+        if (data.logo_url) setLogoPreview(data.logo_url);
+        if (data.cover_photo_url) setCoverPreview(data.cover_photo_url);
         const cfg = data.programs?.[0]?.config_json as { threshold?: number; reward_label?: string } | undefined;
         if (cfg?.threshold) setStampThreshold(String(cfg.threshold));
         if (cfg?.reward_label) setRewardLabel(cfg.reward_label);
@@ -202,6 +210,79 @@ export default function OnboardingPage() {
     setLogoPreview(url);
   }
 
+  async function handleCoverFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setError("Format non supporté pour la photo (JPG, PNG, WEBP).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Photo trop volumineuse (max 5 Mo).");
+      return;
+    }
+
+    setError(null);
+    setCoverPreview(URL.createObjectURL(file));
+    setSelectedCoverUrl(null);
+
+    const token = localStorage.getItem("access_token");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setCoverUploading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/business/cover-photo`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCoverPreview(data.cover_photo_url);
+        setSelectedCoverUrl(data.cover_photo_url);
+      } else {
+        setError(data.message ?? "Erreur lors de l'upload photo.");
+        setCoverPreview(null);
+      }
+    } catch {
+      setError("Impossible de contacter l'API.");
+      setCoverPreview(null);
+    } finally {
+      setCoverUploading(false);
+      if (coverInputRef.current) coverInputRef.current.value = "";
+    }
+  }
+
+  async function selectGmbCoverPhoto(url: string) {
+    setError(null);
+    setCoverUploading(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(`${API_URL}/api/v1/business/cover-photo-from-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message ?? "Erreur lors de l'application de la photo.");
+        return;
+      }
+      setCoverPreview(data.cover_photo_url);
+      setSelectedCoverUrl(data.cover_photo_url);
+    } catch {
+      setError("Impossible de contacter l'API.");
+    } finally {
+      setCoverUploading(false);
+    }
+  }
+
   // ── Navigation entre étapes ──────────────────────────────────────────────
 
   function handleStep1(e: React.FormEvent) {
@@ -267,7 +348,7 @@ export default function OnboardingPage() {
         }
       }
 
-      // 3. Mettre à jour le programme fidélité
+      // 3. Mettre à jour le programme fidélité (ou le créer s'il n'existe pas encore)
       const programId = business?.programs?.[0]?.id;
       if (programId) {
         const progRes = await fetch(`${API_URL}/api/v1/business/programs/${programId}`, {
@@ -282,6 +363,22 @@ export default function OnboardingPage() {
         if (!progRes.ok) {
           const data = await progRes.json();
           setError(data.message ?? "Erreur lors de la configuration du programme.");
+          return;
+        }
+      } else {
+        const createRes = await fetch(`${API_URL}/api/v1/business/programs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            name: "Carte fidélité",
+            type: "STAMPS",
+            config: { threshold, reward_label: rewardLabel.trim() },
+          }),
+        });
+
+        if (!createRes.ok) {
+          const data = await createRes.json();
+          setError(data.message ?? "Erreur lors de la création du programme.");
           return;
         }
       }
@@ -304,7 +401,7 @@ export default function OnboardingPage() {
         <div className="flex items-center gap-0 mb-8">
           <StepDot step={1} current={step} label="Établissement" />
           <div className={`flex-1 h-0.5 transition-colors ${step > 1 ? "bg-green-400" : "bg-gray-200"}`} />
-          <StepDot step={2} current={step} label="Logo" />
+          <StepDot step={2} current={step} label="Apparence" />
           <div className={`flex-1 h-0.5 transition-colors ${step > 2 ? "bg-green-400" : "bg-gray-200"}`} />
           <StepDot step={3} current={step} label="Programme" />
         </div>
@@ -321,12 +418,12 @@ export default function OnboardingPage() {
             </div>
             <h1 className="text-xl font-bold text-gray-900">
               {step === 1 && "Votre établissement"}
-              {step === 2 && "Votre logo"}
+              {step === 2 && "Votre apparence"}
               {step === 3 && "Programme de fidélité"}
             </h1>
             <p className="mt-1 text-sm text-gray-500">
               {step === 1 && "Donnez un nom à votre établissement. Ce nom sera permanent."}
-              {step === 2 && "Ajoutez un logo pour personnaliser votre carte fidélité."}
+              {step === 2 && "Ajoutez un logo et une photo d'établissement pour personnaliser vos cartes Wallet."}
               {step === 3 && "Définissez les règles de votre programme de tampons."}
             </p>
           </div>
@@ -534,6 +631,81 @@ export default function OnboardingPage() {
                   />
                 </div>
 
+                <div className="pt-4 border-t border-gray-100 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Photo de l'établissement (bannière)
+                  </p>
+
+                  {gmbPhotos.length > 0 && !coverPreview && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {gmbPhotos.map((url, i) => (
+                        <button
+                          key={`cover-${i}`}
+                          type="button"
+                          onClick={() => selectGmbCoverPhoto(url)}
+                          disabled={coverUploading}
+                          className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 hover:border-blue-400 disabled:opacity-60"
+                        >
+                          <img src={url} alt={`Photo cover ${i + 1}`} className="w-full h-full object-cover" />
+                          {coverUploading && (
+                            <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                              <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-4">
+                    {coverPreview ? (
+                      <div className="relative shrink-0">
+                        <img
+                          src={coverPreview}
+                          alt="Photo établissement"
+                          className="w-24 h-16 rounded-xl object-cover border border-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { setCoverPreview(null); setSelectedCoverUrl(null); }}
+                          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => coverInputRef.current?.click()}
+                        className="w-24 h-16 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors shrink-0"
+                      >
+                        <Store className="h-5 w-5" />
+                        <span className="text-xs">Photo</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <button
+                        type="button"
+                        disabled={coverUploading}
+                        onClick={() => coverInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 py-1.5 px-3 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                      >
+                        <Upload className="h-4 w-4" />
+                        {coverUploading ? "Upload en cours…" : coverPreview ? "Changer la photo" : "Choisir une photo"}
+                      </button>
+                      <p className="text-xs text-gray-400">JPG, PNG, WEBP — max 5 Mo</p>
+                    </div>
+                  </div>
+
+                  <input
+                    ref={coverInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleCoverFile}
+                    className="hidden"
+                  />
+                </div>
+
                 {error && <ErrorBox message={error} />}
 
                 {/* Actions */}
@@ -548,10 +720,10 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     onClick={goToStep3}
-                    disabled={logoUploading}
+                    disabled={logoUploading || coverUploading}
                     className="flex-1 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                   >
-                    {logoPreview ? "Continuer →" : "Passer cette étape →"}
+                    {logoPreview || coverPreview ? "Continuer →" : "Passer cette étape →"}
                   </button>
                 </div>
               </div>

@@ -247,23 +247,6 @@ export default function BusinessPage() {
     }
   }
 
-  // ── Régénérer le slug depuis le nom actuel ──────────────────────────────────
-  async function regenerateSlug() {
-    const token = localStorage.getItem("access_token");
-    try {
-      const res = await fetch(`${API_URL}/api/v1/business`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ regenerate_slug: true }),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setBusiness((b) => b ? { ...b, ...data } : data);
-    } catch {
-      // silencieux
-    }
-  }
-
   // ── Détection de changements dans le formulaire général ─────────────────────
   const nameLocked = business?.name_locked ?? false;
   const isDirty =
@@ -524,8 +507,6 @@ export default function BusinessPage() {
       {business?.id && (
         <QrRegistrationSection
           slug={business.id}
-          businessName={business.name}
-          onRegenerate={regenerateSlug}
         />
       )}
 
@@ -1049,32 +1030,11 @@ function GmbPhotoModal({
 
 function QrRegistrationSection({
   slug,
-  businessName,
-  onRegenerate,
 }: {
   slug: string;
-  businessName: string;
-  onRegenerate: () => Promise<void>;
 }) {
   const registrationUrl = `${APP_URL}/join/${slug}`;
   const [copied, setCopied] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [regenerated, setRegenerated] = useState(false);
-
-  // Détecte si le slug semble issu du nom actuel
-  function slugMatchesName(s: string, n: string) {
-    const expected = n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-    return s === expected || s.startsWith(expected + "-");
-  }
-  const isStale = businessName && !slugMatchesName(slug, businessName);
-
-  async function handleRegenerate() {
-    setRegenerating(true);
-    await onRegenerate();
-    setRegenerating(false);
-    setRegenerated(true);
-    setTimeout(() => setRegenerated(false), 3000);
-  }
 
   function copyLink() {
     navigator.clipboard.writeText(registrationUrl).then(() => {
@@ -1139,34 +1099,6 @@ function QrRegistrationSection({
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
-
-          {/* Alerte slug obsolète */}
-          {isStale && (
-            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
-              <div className="flex-1">
-                <p className="text-xs font-medium text-amber-800">
-                  Le lien ne correspond plus au nom de l'établissement.
-                </p>
-                <p className="text-xs text-amber-600 mt-0.5">
-                  Attendu : <span className="font-mono">/join/{businessName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}</span>
-                </p>
-              </div>
-              <button
-                onClick={handleRegenerate}
-                disabled={regenerating}
-                className="shrink-0 py-1.5 px-3 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
-              >
-                {regenerating ? "…" : regenerated ? "Mis à jour ✓" : "Régénérer"}
-              </button>
-            </div>
-          )}
-
-          {/* Confirmation si pas stale mais vient d'être régénéré */}
-          {!isStale && regenerated && (
-            <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-              Lien mis à jour depuis le nom de l'établissement ✓
-            </p>
-          )}
 
           {/* Actions */}
           <div className="flex flex-wrap gap-3">

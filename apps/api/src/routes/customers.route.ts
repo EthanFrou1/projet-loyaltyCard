@@ -8,6 +8,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { prisma } from "@loyalty/database";
 import { CustomerService } from "../services/customer.service.js";
 
 // ─── Schémas Zod ──────────────────────────────────────────────────────────────
@@ -40,6 +41,19 @@ export async function customerRoutes(app: FastifyInstance) {
     const body = CreateCustomerBody.safeParse(request.body);
     if (!body.success) {
       return reply.status(400).send({ error: "ValidationError", message: body.error.message });
+    }
+
+    const activeProgram = await prisma.program.findFirst({
+      where: { business_id: request.user.business_id, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!activeProgram) {
+      return reply.status(409).send({
+        error: "BusinessSetupRequired",
+        code: "BUSINESS_SETUP_REQUIRED",
+        message: "Aucun programme actif. Créez d'abord votre premier programme de fidélité.",
+        required_step: "first_program",
+      });
     }
 
     try {

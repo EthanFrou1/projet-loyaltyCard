@@ -380,6 +380,59 @@ export async function businessRoutes(app: FastifyInstance) {
     }
   });
 
+  // POST /business/cover-photo-from-url — télécharge une image distante et l'upload sur R2
+  app.post("/cover-photo-from-url", { preHandler: [app.requireOwner] }, async (request, reply) => {
+    const body = z.object({ url: z.string().url() }).safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ error: "BadRequest", message: "URL invalide" });
+    }
+
+    try {
+      const imgRes = await fetch(body.data.url);
+      if (!imgRes.ok) throw new Error("Impossible de télécharger l'image");
+
+      const rawType = imgRes.headers.get("content-type") ?? "image/jpeg";
+      const contentType = rawType.split(";")[0]?.trim() ?? "image/jpeg";
+      const extMap: Record<string, string> = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+      };
+      const ext = extMap[contentType];
+      if (!ext) {
+        return reply.status(400).send({
+          error: "BadRequest",
+          message: "Format non supporté. Utilisez JPG, PNG ou WEBP.",
+        });
+      }
+
+      const buffer = Buffer.from(await imgRes.arrayBuffer());
+      if (buffer.length > 5 * 1024 * 1024) {
+        return reply.status(400).send({
+          error: "BadRequest",
+          message: "Fichier trop volumineux (max 5 Mo).",
+        });
+      }
+
+      const storage = new StorageService();
+      const key = `covers/${request.user.business_id}/cover.${ext}`;
+      const coverUrl = await storage.upload(buffer, key, contentType);
+
+      const updated = await prisma.business.update({
+        where: { id: request.user.business_id },
+        data: { cover_photo_url: coverUrl },
+      });
+
+      return reply.send({ cover_photo_url: updated.cover_photo_url });
+    } catch (err) {
+      request.log.error(err, "Erreur cover-photo-from-url");
+      return reply.status(500).send({
+        error: "StorageError",
+        message: "Impossible de récupérer ou d'uploader la photo.",
+      });
+    }
+  });
+
   // PATCH /business
   app.patch("/", { preHandler: [app.requireOwner] }, async (request, reply) => {
     const body = UpdateBusinessBody.safeParse(request.body);

@@ -83,6 +83,15 @@ export async function publicRoutes(app: FastifyInstance) {
       ...extractProgramPreview(p.config_json),
     }));
 
+    if (allPrograms.length === 0) {
+      return reply.status(409).send({
+        error: "BusinessSetupRequired",
+        code: "BUSINESS_SETUP_REQUIRED",
+        message: "Cet établissement n'a pas encore de programme de fidélité actif.",
+        required_step: "first_program",
+      });
+    }
+
     const requestedProgramId = query.data.program_id;
     const programs = requestedProgramId
       ? allPrograms.filter((p) => p.id === requestedProgramId)
@@ -130,6 +139,15 @@ export async function publicRoutes(app: FastifyInstance) {
       orderBy: [{ version: "desc" }, { created_at: "desc" }],
       select: { id: true },
     });
+
+    if (activePrograms.length === 0) {
+      return reply.status(409).send({
+        error: "BusinessSetupRequired",
+        code: "BUSINESS_SETUP_REQUIRED",
+        message: "Cet établissement n'a pas encore de programme de fidélité actif.",
+        required_step: "first_program",
+      });
+    }
 
     const activeProgramIds = new Set(activePrograms.map((p) => p.id));
 
@@ -186,4 +204,3 @@ export async function publicRoutes(app: FastifyInstance) {
     });
   });
 }
-

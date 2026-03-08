@@ -1,13 +1,8 @@
-"use client";
+﻿"use client";
 
-/**
- * Page de setup — créer son compte (email + mot de passe uniquement).
- * Le business est créé automatiquement avec un nom par défaut.
- * La configuration du salon se fait ensuite dans /onboarding.
- */
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -16,6 +11,11 @@ export default function SetupPage() {
   const [form, setForm] = useState({ email: "", password: "", confirm: "" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.add("no-shell-pad");
+    return () => document.body.classList.remove("no-shell-pad");
+  }, []);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -39,70 +39,170 @@ export default function SetupPage() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
-        setError(data.message ?? "Erreur lors de la création du compte");
+        setError(data.message ?? "Erreur lors de la création du compte.");
         return;
       }
 
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
-
       router.push("/dashboard");
     } catch {
-      setError("Impossible de contacter l'API (localhost:3001)");
+      setError("Impossible de contacter l'API.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full p-8 bg-white rounded-xl shadow space-y-6">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(120deg, rgba(15,23,42,0.9), rgba(30,41,59,0.72)), url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1800&q=80')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      />
+      <div className="absolute -top-20 right-10 h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl animate-pulse" />
+      <div className="absolute -bottom-16 left-10 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
 
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Créer mon compte</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Vous configurerez votre salon à l'étape suivante.
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl items-center px-4 py-0 sm:px-6 sm:py-10">
+        <div className="hidden w-1/2 pr-12 lg:block">
+          <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-white">
+            FidélitéPro+
+          </p>
+          <h1 className="mt-5 text-4xl font-bold leading-tight text-white">
+            Lancez votre programme de fidélité en quelques minutes.
+          </h1>
+          <p className="mt-4 max-w-md text-sm text-slate-200">
+            Créez votre compte, configurez votre établissement et activez votre premier programme.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Email" name="email" type="email" placeholder="vous@exemple.fr" value={form.email} onChange={handleChange} />
-          <Field label="Mot de passe (min. 8 caractères)" name="password" type="password" placeholder="••••••••" value={form.password} onChange={handleChange} />
-          <Field label="Confirmer le mot de passe" name="confirm" type="password" placeholder="••••••••" value={form.confirm} onChange={handleChange} />
+        <div className="w-full lg:w-1/2">
+          <div className="mb-4 lg:hidden">
+            <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-white">
+              FidélitéPro+
+            </p>
+            <h1 className="mt-3 text-3xl font-bold leading-tight text-white">
+              Lancez votre programme de fidélité en quelques minutes.
+            </h1>
+            <p className="mt-2 max-w-md text-sm text-slate-200">
+              Créez votre compte, configurez votre établissement et activez votre premier programme.
+            </p>
+          </div>
 
-          {error && (
-            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
-              {error}
-            </div>
-          )}
+          <div className="mx-auto w-full max-w-md rounded-2xl border border-white/20 bg-white/90 p-8 shadow-2xl backdrop-blur">
+            <h2 className="text-2xl font-bold text-slate-900">Créer mon compte</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              L'établissement et le programme seront configurés juste après.
+            </p>
 
-          <button type="submit" disabled={loading}
-            className="w-full py-2 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-            {loading ? "Création…" : "Créer mon compte →"}
-          </button>
-        </form>
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <Field label="Email">
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="vous@exemple.fr"
+                  value={form.email}
+                  onChange={handleChange}
+                  className={inputClass}
+                />
+              </Field>
 
-        <p className="text-xs text-center text-gray-400">
-          Déjà un compte ?{" "}
-          <a href="/login" className="text-blue-600 hover:underline">Se connecter</a>
-        </p>
+              <Field label="Mot de passe">
+                <PasswordInput
+                  name="password"
+                  required
+                  placeholder="********"
+                  value={form.password}
+                  onChange={handleChange}
+                />
+              </Field>
+
+              <Field label="Confirmer le mot de passe">
+                <PasswordInput
+                  name="confirm"
+                  required
+                  placeholder="********"
+                  value={form.confirm}
+                  onChange={handleChange}
+                />
+              </Field>
+
+              {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? "Création..." : "Créer mon compte"}
+              </button>
+            </form>
+
+            <p className="mt-5 text-center text-sm text-slate-500">
+              Déjà un compte ?{" "}
+              <Link href="/login" className="font-semibold text-blue-600 hover:underline">
+                Se connecter
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function Field({ label, name, type, placeholder, value, onChange }: {
-  label: string; name: string; type: string;
-  placeholder: string; value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      <input id={name} name={name} type={type} required placeholder={placeholder} value={value} onChange={onChange}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
+      {children}
     </div>
   );
 }
+
+function PasswordInput({
+  name,
+  value,
+  onChange,
+  placeholder,
+  required,
+}: {
+  name: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  required?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+
+  return (
+    <div className="relative">
+      <input
+        name={name}
+        type={show ? "text" : "password"}
+        required={required}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        className={`${inputClass} pr-24`}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        className="absolute inset-y-0 right-2 my-auto h-7 rounded-md px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+        aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+      >
+        {show ? "Masquer" : "Afficher"}
+      </button>
+    </div>
+  );
+}
+
+const inputClass =
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200";

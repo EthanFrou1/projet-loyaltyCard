@@ -235,7 +235,7 @@ export default function DashboardScanPage() {
     if (!customer) return;
     const programId = customer.program_id ?? activeProgram?.id;
     if (!programId) {
-      setResult({ ok: false, message: "Aucun programme actif configure." });
+      setResult({ ok: false, message: "Aucun programme actif configuré." });
       return;
     }
 
@@ -270,7 +270,7 @@ export default function DashboardScanPage() {
     if (!customer) return;
     const programId = customer.program_id ?? activeProgram?.id;
     if (!programId) {
-      setResult({ ok: false, message: "Aucun programme actif configure." });
+      setResult({ ok: false, message: "Aucun programme actif configuré." });
       return;
     }
 
@@ -477,4 +477,3 @@ export default function DashboardScanPage() {
     </div>
   );
 }
-

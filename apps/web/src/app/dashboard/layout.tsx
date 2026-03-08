@@ -60,6 +60,14 @@ interface UserProfile {
   email: string;
   role: string;
   business: { name: string; plan: string };
+  setup?: {
+    requires_onboarding: boolean;
+    missing_steps: string[];
+  };
+}
+
+interface BusinessSummary {
+  programs?: Array<{ status: "ACTIVE" | "ARCHIVED" }>;
 }
 
 const planStyles: Record<string, { label: string; className: string }> = {
@@ -67,6 +75,7 @@ const planStyles: Record<string, { label: string; className: string }> = {
   PRO: { label: "Pro", className: "bg-blue-100 text-blue-700" },
   BUSINESS: { label: "Business", className: "bg-violet-100 text-violet-700" },
 };
+const PLAN_LIMITS: Record<string, number> = { STARTER: 1, PRO: 3, BUSINESS: Infinity };
 
 const fallbackPlanStyle = { label: "Starter", className: "bg-gray-100 text-gray-600" };
 
@@ -74,6 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [activeProgramCount, setActiveProgramCount] = useState<number | null>(null);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const isOwner = user?.role === "OWNER" || user?.role === "ADMIN";
@@ -85,26 +95,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    // Charger le profil utilisateur
+    // Charger le profil utilisateur + état onboarding
     fetch(`${API_URL}/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data) setUser(data); })
-      .catch(() => {});
-
-    // Vérifier si l'onboarding est nécessaire : nom par défaut OU aucun programme
-    fetch(`${API_URL}/api/v1/business`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!data) return;
-        const nameNotSet = !data.name || data.name.trim() === "";
-        const noPrograms = !data.programs || data.programs.length === 0;
-        if (nameNotSet || noPrograms) setShowOnboarding(true);
+        setUser(data);
+        const ownerRole = data.role === "OWNER" || data.role === "ADMIN";
+        if (ownerRole && data.setup?.requires_onboarding) setShowOnboarding(true);
       })
       .catch(() => {});
+
+    fetch(`${API_URL}/api/v1/business`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: BusinessSummary | null) => {
+        const count = data?.programs?.filter((p) => p.status === "ACTIVE").length ?? 0;
+        setActiveProgramCount(count);
+      })
+      .catch(() => {
+        setActiveProgramCount(0);
+      });
   }, [router]);
 
   useEffect(() => {
@@ -130,12 +144,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const currentPlanStyle = user?.business?.plan
     ? (planStyles[user.business.plan] ?? fallbackPlanStyle)
     : fallbackPlanStyle;
+  const currentPlan = user?.business?.plan ?? "STARTER";
+  const planLimit = PLAN_LIMITS[currentPlan] ?? 1;
+  const canCreateProgram = isOwner && activeProgramCount !== null && activeProgramCount < planLimit;
 
   return (
     <div className="flex h-screen bg-gray-100">
       <aside className="hidden lg:flex w-64 bg-white shadow-sm flex-col">
         <div className="p-6 border-b">
-          <h1 className="text-xl font-bold text-gray-900">LoyaltyCard</h1>
+          <h1 className="text-xl font-bold text-gray-900">FidélitéPro+</h1>
           {user?.business?.name && (
             <p className="text-xs text-gray-400 mt-0.5 truncate">{user.business.name}</p>
           )}
@@ -234,14 +251,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <UserPlus className="h-4 w-4 text-blue-600" />
               Nouveau client
             </Link>
-            <Link
-              href="/dashboard/programs?new=1"
-              onClick={() => setQuickActionsOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
-            >
-              <Stamp className="h-4 w-4 text-blue-600" />
-              Nouveau programme
-            </Link>
+            {canCreateProgram && (
+              <Link
+                href="/dashboard/programs?new=1"
+                onClick={() => setQuickActionsOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <Stamp className="h-4 w-4 text-blue-600" />
+                Nouveau programme
+              </Link>
+            )}
             <button
               type="button"
               onClick={goToQrFocus}
@@ -318,7 +337,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       {showOnboarding && (
-        <OnboardingModal onClose={() => setShowOnboarding(false)} />
+        <OnboardingModal
+          onCompleted={() => setShowOnboarding(false)}
+        />
       )}
     </div>
   );
@@ -326,12 +347,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
 // ─── Modale d'onboarding — wizard 4 étapes affiché à la 1ère connexion ───────
 
-function OnboardingModal({ onClose }: { onClose: () => void }) {
+function OnboardingModal({ onCompleted }: { onCompleted: () => void }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [programId, setProgramId] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const gmbTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Étape 1 — établissement
@@ -345,11 +367,14 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
   const [gmbOpen, setGmbOpen] = useState(false);
   const [gmbImported, setGmbImported] = useState(false);
 
-  // Étape 2 — logo
+  // Étape 2 — apparence (logo + photo établissement)
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
   const [gmbPhotos, setGmbPhotos] = useState<string[]>([]);
   const [applyingPhoto, setApplyingPhoto] = useState<string | null>(null);
+  const [applyingCoverPhoto, setApplyingCoverPhoto] = useState<string | null>(null);
 
   // Étape 3 — programme
   const [threshold, setThreshold] = useState("10");
@@ -371,6 +396,8 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
       .then((data) => {
         if (!data) return;
         if (data.name) setBizName(data.name);
+        if (data.logo_url) setLogoPreview(data.logo_url);
+        if (data.cover_photo_url) setCoverPreview(data.cover_photo_url);
         const s = data.settings_json ?? {};
         if (s.establishment_type) setBizType(s.establishment_type);
         if (s.address)            setBizAddress(s.address);
@@ -441,6 +468,19 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // Appliquer une photo Google comme cover photo (bannière Wallet)
+  async function applyGmbCoverPhoto(url: string) {
+    setApplyingCoverPhoto(url);
+    try {
+      const data = await apiClient.post<{ cover_photo_url: string }>("/business/cover-photo-from-url", { url });
+      setCoverPreview(data.cover_photo_url);
+    } catch {
+      setError("Impossible d'appliquer cette photo d'établissement.");
+    } finally {
+      setApplyingCoverPhoto(null);
+    }
+  }
+
   // Upload logo en temps réel
   async function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -467,6 +507,35 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
     } finally {
       setLogoUploading(false);
       if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  }
+
+  // Upload photo établissement en temps réel
+  async function handleCoverFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) { setError("Format non supporté pour la photo (JPG, PNG, WEBP)."); return; }
+    if (file.size > 5 * 1024 * 1024)  { setError("Photo trop volumineuse (max 5 Mo)."); return; }
+    setError(null);
+    setCoverPreview(URL.createObjectURL(file));
+    setCoverUploading(true);
+    const token = localStorage.getItem("access_token");
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/business/cover-photo`, {
+        method: "POST", headers: { Authorization: `Bearer ${token ?? ""}` }, body: fd,
+      });
+      const data = await res.json();
+      if (res.ok) setCoverPreview(data.cover_photo_url);
+      else { setError(data.message ?? "Erreur upload photo."); setCoverPreview(null); }
+    } catch {
+      setError("Impossible de contacter l'API.");
+      setCoverPreview(null);
+    } finally {
+      setCoverUploading(false);
+      if (coverInputRef.current) coverInputRef.current.value = "";
     }
   }
 
@@ -527,7 +596,7 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
       // Invalider le cache SWR pour forcer un re-fetch immédiat dans le dashboard
       await swrMutate("/business");
       await swrMutate("/business/stats");
-      onClose();
+      onCompleted();
     } catch {
       setError("Impossible de contacter l'API.");
     } finally {
@@ -553,15 +622,15 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
           <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-0.5">
             Étape {step} / 4
           </p>
-          <h2 className="text-xl font-bold text-gray-900">
-            {step === 1 && "Votre établissement"}
-            {step === 2 && "Votre logo"}
-            {step === 3 && "Programme de fidélité"}
-            {step === 4 && "Design de votre carte"}
-          </h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              {step === 1 && "Votre établissement"}
+              {step === 2 && "Votre apparence"}
+              {step === 3 && "Programme de fidélité"}
+              {step === 4 && "Design de votre carte"}
+            </h2>
           <p className="text-sm text-gray-500 mt-0.5">
             {step === 1 && "Recherchez votre établissement sur Google pour le sélectionner, ou tapez son nom manuellement."}
-            {step === 2 && "Optionnel — personnalisez votre carte fidélité avec votre logo."}
+            {step === 2 && "Optionnel — ajoutez un logo et une photo d'établissement pour vos cartes Wallet."}
             {step === 3 && "Définissez les règles de votre programme de tampons."}
             {step === 4 && "Choisissez les couleurs de votre carte Apple Wallet et Google Wallet."}
           </p>
@@ -768,13 +837,92 @@ function OnboardingModal({ onClose }: { onClose: () => void }) {
                 accept="image/jpeg,image/png,image/svg+xml,image/webp"
                 onChange={handleLogoFile} className="hidden" />
 
+              {/* Photo établissement (bannière) */}
+              <div className="pt-4 border-t border-gray-100 space-y-3">
+                <p className="text-sm font-medium text-gray-700">Photo de l'établissement (bannière)</p>
+
+                {coverPreview && (
+                  <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
+                    <div className="relative shrink-0">
+                      <img src={coverPreview} alt="Photo établissement" className="w-16 h-12 rounded-lg object-cover border border-gray-200" />
+                      <button type="button" onClick={() => setCoverPreview(null)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-green-800">Photo sélectionnée ✓</p>
+                      <p className="text-xs text-green-600">Affichée sur la bannière Wallet</p>
+                    </div>
+                  </div>
+                )}
+
+                {!coverPreview && gmbPhotos.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                      Choisir depuis Google
+                    </p>
+                    <div className="grid grid-cols-5 gap-2">
+                      {gmbPhotos.map((url, i) => (
+                        <button
+                          key={`cover-${i}`} type="button"
+                          disabled={applyingCoverPhoto !== null}
+                          onClick={() => applyGmbCoverPhoto(url)}
+                          className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 hover:border-blue-400 hover:scale-105 transition-all disabled:opacity-60 group"
+                        >
+                          <img src={url} alt={`Photo établissement ${i + 1}`} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                            <span className="opacity-0 group-hover:opacity-100 text-white text-[10px] font-semibold transition-opacity">
+                              Choisir
+                            </span>
+                          </div>
+                          {applyingCoverPhoto === url && (
+                            <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                              <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!coverPreview && (
+                  <div className={`flex items-center gap-4 ${gmbPhotos.length > 0 ? "pt-3 border-t border-gray-100" : ""}`}>
+                    <div
+                      onClick={() => coverInputRef.current?.click()}
+                      className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors shrink-0"
+                    >
+                      <Store className="h-5 w-5" />
+                      <span className="text-xs">Photo</span>
+                    </div>
+                    <div className="space-y-1">
+                      <button type="button" disabled={coverUploading} onClick={() => coverInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 py-1.5 px-3 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                        <Upload className="h-4 w-4" />
+                        {coverUploading ? "Upload en cours…" : "Choisir une photo"}
+                      </button>
+                      <p className="text-xs text-gray-400">JPG, PNG, WEBP — max 5 Mo</p>
+                    </div>
+                  </div>
+                )}
+
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleCoverFile}
+                  className="hidden"
+                />
+              </div>
+
               {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
               <div className="flex gap-3">
                 <button type="button" onClick={() => { setError(null); setStep(1); }}
                   className="py-2 px-4 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
                   ← Retour
                 </button>
-                <button type="button" disabled={logoUploading || applyingPhoto !== null}
+                <button type="button" disabled={logoUploading || coverUploading || applyingPhoto !== null || applyingCoverPhoto !== null}
                   onClick={() => { setError(null); setStep(3); }}
                   className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
                   {logoPreview ? "Continuer →" : "Passer cette étape →"}
@@ -1002,3 +1150,4 @@ function OnboardingQrSvg({ size = 56 }: { size?: number }) {
     </svg>
   );
 }
+
