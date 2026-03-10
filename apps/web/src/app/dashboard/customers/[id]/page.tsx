@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * Page détail client
@@ -16,11 +16,11 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
-import { QRCodeSVG } from "qrcode.react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Smartphone, CheckCircle2, Circle, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
+import { StyledQRCode } from "@/components/styled-qr-code";
 import type { CustomerDetailResponse } from "@loyalty/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -38,13 +38,23 @@ export default function CustomerDetailPage() {
     (url: string) => apiClient.get<CustomerDetailResponse>(url)
   );
 
-  const { data: business } = useSWR<{ programs: Array<{ id: string; config_json: { threshold?: number } }> }>(
+  const { data: business } = useSWR<{
+    programs: Array<{ id: string; config_json: { threshold?: number } }>;
+    settings_json: { establishment_type?: string } | null;
+    logo_url: string | null;
+  }>(
     "/business",
-    (url: string) => apiClient.get<{ programs: Array<{ id: string; config_json: { threshold?: number } }> }>(url)
+    (url: string) => apiClient.get<{
+      programs: Array<{ id: string; config_json: { threshold?: number } }>;
+      settings_json: { establishment_type?: string } | null;
+      logo_url: string | null;
+    }>(url)
   );
 
   const programId = business?.programs?.[0]?.id ?? null;
   const stampThreshold = business?.programs?.[0]?.config_json?.threshold ?? 10;
+  const establishmentType = business?.settings_json?.establishment_type ?? null;
+  const logoUrl = business?.logo_url ?? null;
 
   const [loading, setLoading] = useState<"stamp" | "redeem" | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
@@ -61,7 +71,7 @@ export default function CustomerDetailPage() {
   if (!customer) {
     return (
       <div className="flex items-center gap-3 text-sm text-gray-400">
-        <div className="h-4 w-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+        <div className="h-4 w-4 border-2 border-gray-300 border-t-slate-500 rounded-full animate-spin" />
         Chargement…
       </div>
     );
@@ -134,7 +144,7 @@ export default function CustomerDetailPage() {
                 key={i}
                 className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-xs font-medium transition-colors shrink-0 ${
                   i < customer.stamp_count
-                    ? "bg-blue-600 border-blue-600 text-white"
+                    ? "bg-slate-900 border-slate-700 text-white"
                     : "border-gray-200 text-gray-300"
                 }`}
               >
@@ -146,7 +156,7 @@ export default function CustomerDetailPage() {
           {/* Barre de progression */}
           <div className="w-full bg-gray-100 rounded-full h-2">
             <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="bg-slate-900 h-2 rounded-full transition-all duration-300"
               style={{ width: `${Math.min(100, (customer.stamp_count / stampThreshold) * 100)}%` }}
             />
           </div>
@@ -156,7 +166,7 @@ export default function CustomerDetailPage() {
             <button
               onClick={handleStamp}
               disabled={loading !== null || rewardAvailable}
-              className="flex-1 py-3 px-4 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="flex-1 py-3 px-4 bg-emerald-500 text-white text-sm font-semibold rounded-xl hover:bg-emerald-600 disabled:opacity-50 transition-colors"
             >
               {loading === "stamp" ? "Ajout…" : "+ 1 Tampon"}
             </button>
@@ -189,9 +199,9 @@ export default function CustomerDetailPage() {
               type="button"
               title="Agrandir le QR code"
               onClick={() => setQrExpanded(true)}
-              className="border border-gray-200 rounded-xl p-2 bg-white hover:border-blue-300 transition-colors"
+              className="border border-gray-200 rounded-xl p-2 bg-white hover:border-slate-300 transition-colors"
             >
-              <QRCodeSVG value={customer.qr_url} size={160} />
+              <StyledQRCode value={customer.qr_url} size={160} establishmentType={establishmentType} logoUrl={logoUrl} />
             </button>
             <p className="text-xs text-center text-gray-400">
               Le client scanne ce code pour valider son passage
@@ -220,7 +230,7 @@ export default function CustomerDetailPage() {
               </button>
             </div>
             <div className="border border-gray-200 rounded-xl p-3 w-fit mx-auto bg-white">
-              <QRCodeSVG value={customer.qr_url} size={260} />
+              <StyledQRCode value={customer.qr_url} size={260} establishmentType={establishmentType} logoUrl={logoUrl} />
             </div>
           </div>
         </div>,
@@ -238,7 +248,7 @@ export default function CustomerDetailPage() {
             {customer.program_name ? (
               <Link
                 href="/dashboard/programs"
-                className="inline-flex items-center gap-1 font-medium text-blue-700 hover:text-blue-900 text-sm"
+                className="inline-flex items-center gap-1 font-medium text-emerald-700 hover:text-slate-900 text-sm"
               >
                 {customer.program_name}
                 <ExternalLink className="h-3 w-3" />
@@ -274,15 +284,11 @@ export default function CustomerDetailPage() {
             </div>
                         <button
               onClick={() => {
-                if (!appleHealth?.ready) return;
                 window.location.href = `${API_URL}/api/v1/wallet/apple/${id}/download`;
               }}
-              disabled={appleHealth?.ready === false}
-              className="text-xs px-3 py-1.5 bg-black text-white rounded-lg hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed transition-opacity shrink-0"
+              className="text-xs px-3 py-1.5 bg-black text-white rounded-lg hover:opacity-90 transition-opacity shrink-0"
             >
-              {appleHealth?.ready === false
-                ? "Indisponible"
-                : hasApple ? "Mettre à jour" : "Ajouter"}
+              {hasApple ? "Mettre à jour" : "Ajouter"}
             </button>
           </div>
 
@@ -305,7 +311,7 @@ export default function CustomerDetailPage() {
                 const data = await apiClient.post<{ save_url: string }>(`/wallet/google/${id}/jwt`, {});
                 window.open(data.save_url, "_blank");
               }}
-              className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:opacity-90 transition-opacity shrink-0"
+              className="text-xs px-3 py-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors shrink-0"
             >
               {hasGoogle ? "Mettre à jour" : "Ajouter"}
             </button>
@@ -322,13 +328,35 @@ export default function CustomerDetailPage() {
         ) : (
           <ul className="divide-y divide-gray-50">
             {customer.transactions.map((t) => (
-              <li key={t.id} className="flex items-center justify-between py-3 text-sm">
-                <span className={t.type === "STAMP_REDEEM" ? "text-green-700 font-medium" : "text-gray-700"}>
-                  {t.type === "STAMP_ADD" && "Tampon ajouté"}
-                  {t.type === "STAMP_REDEEM" && "🎁 Récompense utilisée"}
-                  {t.note && <span className="text-gray-400"> — {t.note}</span>}
-                </span>
-                <span className="text-gray-400 shrink-0 ml-4">
+              <li key={t.id} className="py-3 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className={`text-sm font-medium ${t.type === "STAMP_REDEEM" ? "text-green-700" : "text-gray-800"}`}>
+                    {t.type === "STAMP_ADD" && "Tampon ajouté"}
+                    {t.type === "STAMP_REDEEM" && "🎁 Récompense utilisée"}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                    {t.performed_by_name && (
+                      <span className="text-xs text-gray-500">
+                        Par <strong className="text-gray-700">{t.performed_by_name}</strong>
+                      </span>
+                    )}
+                    {t.source && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        t.source === "QR_SCAN"
+                          ? "bg-slate-100 text-emerald-500"
+                          : t.source === "PAGE_CLIENT"
+                          ? "bg-gray-100 text-gray-500"
+                          : "bg-gray-100 text-gray-400"
+                      }`}>
+                        {t.source === "QR_SCAN" ? "Scan QR" : t.source === "PAGE_CLIENT" ? "Page client" : t.source}
+                      </span>
+                    )}
+                    {t.note && (
+                      <span className="text-xs text-gray-400 truncate max-w-[200px]">{t.note}</span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-xs text-gray-400 shrink-0 mt-0.5">
                   {new Date(t.created_at).toLocaleDateString("fr-FR", {
                     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
                   })}
@@ -348,7 +376,7 @@ function InfoItem({ label, value, highlight }: { label: string; value: string; h
   return (
     <div>
       <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
-      <p className={`font-medium ${highlight ? "text-blue-700" : "text-gray-900"}`}>{value}</p>
+      <p className={`font-medium ${highlight ? "text-emerald-700" : "text-gray-900"}`}>{value}</p>
     </div>
   );
 }

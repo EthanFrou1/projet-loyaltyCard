@@ -70,7 +70,7 @@ export default function AiPage() {
             </div>
             <div className="mt-1 h-1.5 w-32 rounded-full bg-gray-200">
               <div
-                className="h-1.5 rounded-full bg-brand-600 transition-all"
+                className="h-1.5 rounded-full bg-emerald-500 transition-all"
                 style={{ width: `${Math.min(percentUsed, 100)}%` }}
               />
             </div>
@@ -173,7 +173,7 @@ function CleanLogoForm({ onJobStarted }: { onJobStarted: () => void }) {
     <form onSubmit={submit} className="space-y-3">
       {/* Zone de sélection fichier */}
       <div
-        className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center cursor-pointer hover:border-brand-400 transition-colors"
+        className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center cursor-pointer hover:border-emerald-400 transition-colors"
         onClick={() => inputRef.current?.click()}
       >
         {preview ? (
@@ -309,7 +309,7 @@ function AiCard({ title, description, icon, children }: {
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm space-y-4">
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-brand-50 rounded-lg text-brand-600">{icon}</div>
+        <div className="p-2 bg-emerald-50 rounded-lg text-emerald-500">{icon}</div>
         <div>
           <h2 className="text-base font-semibold text-gray-800">{title}</h2>
           <p className="text-sm text-gray-500">{description}</p>
@@ -329,7 +329,7 @@ function SubmitButton({ loading, disabled, label }: {
     <button
       type="submit"
       disabled={loading || disabled}
-      className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 disabled:opacity-50"
+      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50"
     >
       {loading && <Loader2 className="h-4 w-4 animate-spin" />}
       {loading ? "En cours…" : label}
@@ -397,7 +397,7 @@ function JobRow({ job, onRefresh }: { job: JobResult; onRefresh: () => void }) {
         <p className="text-xs text-red-500">{job.error_message ?? "Erreur inconnue"}</p>
       )}
       {(job.status === "PENDING" || job.status === "PROCESSING") && !polling && (
-        <button onClick={retry} className="text-xs text-brand-600 underline">
+        <button onClick={retry} className="text-xs text-emerald-600 underline">
           Actualiser
         </button>
       )}
@@ -408,7 +408,7 @@ function JobRow({ job, onRefresh }: { job: JobResult; onRefresh: () => void }) {
 function StatusIcon({ status }: { status: JobResult["status"] }) {
   if (status === "DONE") return <CheckCircle className="h-4 w-4 text-green-500" />;
   if (status === "FAILED") return <XCircle className="h-4 w-4 text-red-500" />;
-  if (status === "PROCESSING") return <Loader2 className="h-4 w-4 animate-spin text-brand-500" />;
+  if (status === "PROCESSING") return <Loader2 className="h-4 w-4 animate-spin text-emerald-500" />;
   return <Clock className="h-4 w-4 text-gray-400" />;
 }
 

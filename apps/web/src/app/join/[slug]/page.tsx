@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * Public join page scanned from business QR.
@@ -176,7 +176,7 @@ export default function JoinPage() {
   if (!business) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="h-8 w-8 border-4 border-slate-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -192,7 +192,7 @@ export default function JoinPage() {
               className="w-20 h-20 rounded-2xl object-cover mx-auto shadow-sm"
             />
           ) : (
-            <div className="w-20 h-20 rounded-2xl bg-blue-100 flex items-center justify-center mx-auto text-3xl">
+            <div className="w-20 h-20 rounded-2xl bg-slate-200 flex items-center justify-center mx-auto text-3xl">
               Shop
             </div>
           )}
@@ -309,7 +309,7 @@ export default function JoinPage() {
                 type="checkbox"
                 checked={consent}
                 onChange={(e) => setConsent(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-slate-700 focus:ring-slate-500 cursor-pointer shrink-0"
               />
               <span className="text-xs text-gray-500 leading-relaxed">
                 J'accepte que mes données (nom, email, téléphone) soient conservées
@@ -340,4 +340,4 @@ export default function JoinPage() {
 }
 
 const inputClass =
-  "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";

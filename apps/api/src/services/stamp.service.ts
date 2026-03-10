@@ -26,7 +26,9 @@ export class StampService {
     businessId: string,
     customerId: string,
     programId: string,
-    note?: string
+    note?: string,
+    source?: string,
+    performedByName?: string
   ) {
     // Vérifier que le client et le programme existent et appartiennent au business
     const [customer, program] = await Promise.all([
@@ -51,6 +53,8 @@ export class StampService {
           type: "STAMP_ADD",
           delta: 1,
           note: note ?? null,
+          source: source ?? null,
+          performed_by_name: performedByName ?? null,
         },
       }),
       prisma.customer.update({
@@ -73,6 +77,8 @@ export class StampService {
         type: transaction.type,
         delta: transaction.delta,
         note: transaction.note,
+        source: transaction.source,
+        performed_by_name: transaction.performed_by_name,
         created_at: transaction.created_at.toISOString(),
       },
       reward_unlocked: rewardUnlocked,
@@ -87,7 +93,9 @@ export class StampService {
     businessId: string,
     customerId: string,
     programId: string,
-    note?: string
+    note?: string,
+    source?: string,
+    performedByName?: string
   ) {
     const [customer, program] = await Promise.all([
       prisma.customer.findFirst({ where: { id: customerId, business_id: businessId } }),
@@ -113,6 +121,8 @@ export class StampService {
           type: "STAMP_REDEEM",
           delta: -threshold,
           note: note ?? `Récompense : ${config.reward_label}`,
+          source: source ?? null,
+          performed_by_name: performedByName ?? null,
         },
       }),
       prisma.customer.update({
@@ -134,6 +144,8 @@ export class StampService {
         type: transaction.type,
         delta: transaction.delta,
         note: transaction.note,
+        source: transaction.source,
+        performed_by_name: transaction.performed_by_name,
         created_at: transaction.created_at.toISOString(),
       },
     };

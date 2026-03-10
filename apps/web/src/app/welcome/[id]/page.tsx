@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /**
  * Page de bienvenue affichée après l'inscription du client.
@@ -106,7 +106,7 @@ export default function WelcomePage() {
                   className="w-12 h-12 rounded-xl object-cover"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-xl">Shop</div>
+                <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center text-xl">Shop</div>
               )}
               <div>
                 <p className="font-semibold text-gray-900">{business.name}</p>

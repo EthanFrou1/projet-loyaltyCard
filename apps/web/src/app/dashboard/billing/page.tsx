@@ -51,9 +51,9 @@ const plans: PlanConfig[] = [
     name: "Pro",
     price: 39,
     icon: Sparkles,
-    iconColor: "text-blue-600",
-    borderColor: "border-blue-500",
-    badgeColor: "bg-blue-600 text-white",
+    iconColor: "text-slate-700",
+    borderColor: "border-slate-500",
+    badgeColor: "bg-slate-900 text-white",
     highlighted: true,
     features: [
       "3 programmes fidélité actifs",
@@ -71,9 +71,9 @@ const plans: PlanConfig[] = [
     name: "Business",
     price: 69,
     icon: Crown,
-    iconColor: "text-violet-600",
-    borderColor: "border-violet-300",
-    badgeColor: "bg-violet-100 text-violet-700",
+    iconColor: "text-emerald-600",
+    borderColor: "border-emerald-300",
+    badgeColor: "bg-emerald-100 text-emerald-700",
     highlighted: false,
     features: [
       "Programmes fidélité illimités",
@@ -136,7 +136,7 @@ export default function BillingPage() {
               {/* Badge "Populaire" pour Pro */}
               {plan.highlighted && !isCurrent && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                  <span className="bg-slate-900 text-white text-xs font-semibold px-3 py-1 rounded-full">
                     Le plus populaire
                   </span>
                 </div>
@@ -211,8 +211,8 @@ export default function BillingPage() {
               <tr className="border-b border-gray-100">
                 <th className="text-left px-6 py-3 text-gray-500 font-medium">Fonctionnalité</th>
                 <th className="text-center px-4 py-3 text-gray-700 font-semibold">Starter</th>
-                <th className="text-center px-4 py-3 text-blue-700 font-semibold">Pro</th>
-                <th className="text-center px-4 py-3 text-violet-700 font-semibold">Business</th>
+                <th className="text-center px-4 py-3 text-slate-800 font-semibold">Pro</th>
+                <th className="text-center px-4 py-3 text-emerald-700 font-semibold">Business</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -229,8 +229,8 @@ export default function BillingPage() {
                 <tr key={row.label} className="hover:bg-gray-50">
                   <td className="px-6 py-3 text-gray-700">{row.label}</td>
                   <td className="px-4 py-3 text-center text-gray-600">{row.starter}</td>
-                  <td className="px-4 py-3 text-center text-blue-600 font-medium">{row.pro}</td>
-                  <td className="px-4 py-3 text-center text-violet-600 font-medium">{row.business}</td>
+                  <td className="px-4 py-3 text-center text-slate-700 font-medium">{row.pro}</td>
+                  <td className="px-4 py-3 text-center text-emerald-600 font-medium">{row.business}</td>
                 </tr>
               ))}
             </tbody>

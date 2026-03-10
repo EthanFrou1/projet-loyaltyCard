@@ -47,7 +47,7 @@ const ESTABLISHMENT_TYPES = [
 const STAMP_THRESHOLD_OPTIONS = Array.from({ length: 8 }, (_, i) => String(i + 8));
 
 const inputClass =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
@@ -412,7 +412,7 @@ export default function OnboardingPage() {
           {/* En-tête */}
           <div className="px-8 pt-8 pb-6 border-b border-gray-100">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-emerald-500 uppercase tracking-wider">
                 Étape {step} sur 3
               </span>
             </div>
@@ -458,7 +458,7 @@ export default function OnboardingPage() {
                       autoFocus
                     />
                     {gmbLoading && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
                     )}
                   </div>
 
@@ -481,7 +481,7 @@ export default function OnboardingPage() {
                           key={r.place_id}
                           type="button"
                           onClick={() => selectGmbPlace(r.place_id)}
-                          className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                          className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-100 transition-colors border-b border-gray-50 last:border-0"
                         >
                           <Search className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
                           <div className="min-w-0">
@@ -527,7 +527,7 @@ export default function OnboardingPage() {
 
                 <button
                   type="submit"
-                  className="w-full py-2.5 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                  className="w-full py-2.5 px-4 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 transition-colors"
                 >
                   Continuer →
                 </button>
@@ -552,13 +552,13 @@ export default function OnboardingPage() {
                           onClick={() => selectGmbPhoto(url)}
                           className={`relative aspect-square rounded-xl overflow-hidden border-2 hover:scale-[1.02] transition-all group ${
                             selectedLogoUrl === url
-                              ? "border-blue-500 ring-2 ring-blue-200"
-                              : "border-gray-200 hover:border-blue-400"
+                              ? "border-slate-500 ring-2 ring-slate-200"
+                              : "border-gray-200 hover:border-slate-400"
                           }`}
                         >
                           <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
                           {selectedLogoUrl === url && (
-                            <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-slate-700/20 flex items-center justify-center">
                               <CheckCircle className="h-6 w-6 text-white drop-shadow" />
                             </div>
                           )}
@@ -594,14 +594,14 @@ export default function OnboardingPage() {
                         </button>
                         {logoUploading && (
                           <div className="absolute inset-0 rounded-xl bg-white/80 flex items-center justify-center">
-                            <div className="h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            <div className="h-5 w-5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
                           </div>
                         )}
                       </div>
                     ) : (
                       <div
                         onClick={() => logoInputRef.current?.click()}
-                        className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors shrink-0"
+                        className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-slate-400 hover:text-slate-600 transition-colors shrink-0"
                       >
                         <Store className="h-6 w-6" />
                         <span className="text-xs">Logo</span>
@@ -644,12 +644,12 @@ export default function OnboardingPage() {
                           type="button"
                           onClick={() => selectGmbCoverPhoto(url)}
                           disabled={coverUploading}
-                          className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 hover:border-blue-400 disabled:opacity-60"
+                          className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 hover:border-slate-400 disabled:opacity-60"
                         >
                           <img src={url} alt={`Photo cover ${i + 1}`} className="w-full h-full object-cover" />
                           {coverUploading && (
                             <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                              <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                              <div className="h-4 w-4 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
                             </div>
                           )}
                         </button>
@@ -676,7 +676,7 @@ export default function OnboardingPage() {
                     ) : (
                       <div
                         onClick={() => coverInputRef.current?.click()}
-                        className="w-24 h-16 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors shrink-0"
+                        className="w-24 h-16 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-slate-400 hover:text-slate-600 transition-colors shrink-0"
                       >
                         <Store className="h-5 w-5" />
                         <span className="text-xs">Photo</span>
@@ -721,7 +721,7 @@ export default function OnboardingPage() {
                     type="button"
                     onClick={goToStep3}
                     disabled={logoUploading || coverUploading}
-                    className="flex-1 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    className="flex-1 py-2 px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                   >
                     {logoPreview || coverPreview ? "Continuer →" : "Passer cette étape →"}
                   </button>
@@ -742,7 +742,7 @@ export default function OnboardingPage() {
                       required
                       value={stampThreshold}
                       onChange={(e) => setStampThreshold(e.target.value)}
-                      className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
                     >
                       {stampThresholdOptions.map((value) => (
                         <option key={value} value={value}>{value}</option>
@@ -770,7 +770,7 @@ export default function OnboardingPage() {
                 </div>
 
                 {/* Aperçu */}
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800">
+                <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-sm text-emerald-700">
                   <p className="font-semibold mb-0.5">{businessName || "Votre établissement"}</p>
                   <p>
                     Après <strong>{stampThreshold || "?"} tampons</strong>, vos clients
@@ -791,7 +791,7 @@ export default function OnboardingPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    className="flex-1 py-2 px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                   >
                     {loading ? "Enregistrement…" : "Terminer et accéder au dashboard →"}
                   </button>
@@ -820,13 +820,13 @@ function StepDot({ step, current, label }: { step: number; current: number; labe
           done
             ? "bg-green-500 text-white"
             : active
-            ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+            ? "bg-slate-900 text-white shadow-md shadow-slate-300"
             : "bg-gray-100 text-gray-400"
         }`}
       >
         {done ? "✓" : step}
       </div>
-      <span className={`text-xs font-medium ${active ? "text-blue-600" : done ? "text-green-600" : "text-gray-400"}`}>
+      <span className={`text-xs font-medium ${active ? "text-emerald-500" : done ? "text-green-600" : "text-gray-400"}`}>
         {label}
       </span>
     </div>

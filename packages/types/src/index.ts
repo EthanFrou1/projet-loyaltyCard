@@ -114,6 +114,8 @@ export interface TransactionResponse {
   type: string;
   delta: number;
   note: string | null;
+  source: string | null;
+  performed_by_name: string | null;
   created_at: string;
 }
 

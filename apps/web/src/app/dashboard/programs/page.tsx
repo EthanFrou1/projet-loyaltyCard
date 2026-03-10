@@ -45,6 +45,7 @@ interface Business {
   name: string;
   slug: string;
   logo_url: string | null;
+  cover_photo_url: string | null;
   plan: "STARTER" | "PRO" | "BUSINESS";
   programs: Program[];
 }
@@ -62,15 +63,15 @@ const PLAN_LIMITS: Record<string, number> = { STARTER: 1, PRO: 3, BUSINESS: Infi
 
 const PLAN_STYLES: Record<string, { label: string; className: string }> = {
   STARTER:  { label: "Starter",  className: "bg-gray-100 text-gray-600" },
-  PRO:      { label: "Pro",      className: "bg-blue-100 text-blue-700" },
+  PRO:      { label: "Pro",      className: "bg-slate-200 text-emerald-700" },
   BUSINESS: { label: "Business", className: "bg-violet-100 text-violet-700" },
 };
-const STAMP_THRESHOLD_OPTIONS = Array.from({ length: 8 }, (_, i) => String(i + 8));
+const STAMP_THRESHOLD_OPTIONS = ["8", "10", "12", "14"];
 
 // ─── Composants utilitaires ───────────────────────────────────────────────────
 
 const inputClass =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -159,6 +160,10 @@ export default function ProgramsPage() {
   const editThresholdOptions = STAMP_THRESHOLD_OPTIONS.includes(editThreshold)
     ? STAMP_THRESHOLD_OPTIONS
     : [editThreshold, ...STAMP_THRESHOLD_OPTIONS];
+  const isNewProgramValid =
+    newName.trim().length >= 2 &&
+    STAMP_THRESHOLD_OPTIONS.includes(newThreshold) &&
+    newReward.trim().length >= 2;
   const isOwner = userRole === "OWNER" || userRole === "ADMIN";
 
   useEffect(() => {
@@ -434,7 +439,7 @@ export default function ProgramsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="h-8 w-8 border-4 border-slate-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -501,8 +506,8 @@ export default function ProgramsPage() {
                 className="py-2 px-4 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                 Annuler
               </button>
-              <button onClick={addProgram} disabled={addingProg}
-                className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              <button onClick={addProgram} disabled={addingProg || !isNewProgramValid}
+                className="py-2 px-4 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
                 {addingProg ? "Création…" : "Créer le programme"}
               </button>
             </div>
@@ -535,7 +540,7 @@ export default function ProgramsPage() {
           ) : (
             <button
               onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center justify-center gap-2 h-10 px-3 sm:px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center justify-center gap-2 h-10 px-3 sm:px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition-colors"
               aria-label="Nouveau programme"
             >
               <Plus className="h-4 w-4" />
@@ -554,7 +559,7 @@ export default function ProgramsPage() {
           {isOwner ? (
             <button
               onClick={() => setShowAddModal(true)}
-              className="mt-4 inline-flex items-center gap-2 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="mt-4 inline-flex items-center gap-2 py-2 px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition-colors"
             >
               <Plus className="h-4 w-4" />
               Créer un programme
@@ -578,7 +583,7 @@ export default function ProgramsPage() {
                   onClick={() => selectProgram(p.id)}
                   className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap -mb-px ${
                     p.id === selectedProgram.id
-                      ? "border-blue-600 text-blue-700 bg-blue-50"
+                      ? "border-slate-700 text-emerald-700 bg-slate-100"
                       : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"
                   }`}
                 >
@@ -594,8 +599,8 @@ export default function ProgramsPage() {
           <div className="border-b border-gray-100 px-4 py-4 sm:px-6 sm:py-5">
             <div className="flex items-start gap-3 sm:items-center sm:justify-between sm:gap-4">
               <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
-                <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 sm:h-11 sm:w-11">
-                  <Stamp className="h-4 w-4 text-blue-600 sm:h-5 sm:w-5" />
+                <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 sm:h-11 sm:w-11">
+                  <Stamp className="h-4 w-4 text-emerald-500 sm:h-5 sm:w-5" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
@@ -641,7 +646,7 @@ export default function ProgramsPage() {
                     onClick={() => setSubTab(tab)}
                     className={`flex flex-none min-w-[110px] flex-col items-center gap-1 whitespace-nowrap px-3 py-3 text-xs font-medium border-b-2 transition-colors sm:min-w-0 sm:flex-row sm:gap-2 sm:px-4 sm:text-sm ${
                       subTab === tab
-                        ? "border-blue-600 text-blue-700"
+                        ? "border-slate-700 text-emerald-700"
                         : "border-transparent text-gray-500 hover:text-gray-700"
                     }`}
                   >
@@ -666,7 +671,7 @@ export default function ProgramsPage() {
                     value={currentStats?.clients}
                     loading={currentStats?.loading ?? true}
                     icon={Users}
-                    colorClass="bg-blue-50 text-blue-600"
+                    colorClass="bg-slate-100 text-emerald-500"
                   />
                   <StatCard
                     label="Tampons distribués"
@@ -706,7 +711,7 @@ export default function ProgramsPage() {
                       type="button"
                       title="Agrandir le QR code"
                       onClick={() => setQrExpanded(true)}
-                      className="mx-auto w-[170px] h-[170px] border border-gray-200 rounded-xl p-2 bg-white flex items-center justify-center hover:border-blue-300 transition-colors"
+                      className="mx-auto w-[170px] h-[170px] border border-gray-200 rounded-xl p-2 bg-white flex items-center justify-center hover:border-slate-300 transition-colors"
                     >
                       <QRCodeSVG value={programJoinUrl || APP_URL} size={150} />
                     </button>
@@ -718,7 +723,7 @@ export default function ProgramsPage() {
                         href={programJoinUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="block text-sm text-blue-600 hover:underline break-all"
+                        className="block text-sm text-emerald-500 hover:underline break-all"
                       >
                         {programJoinUrl}
                       </a>
@@ -769,7 +774,7 @@ export default function ProgramsPage() {
                   </p>
                   <div className="flex items-center gap-4 flex-wrap">
                     <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm">
-                      <Stamp className="h-4 w-4 text-blue-500" />
+                      <Stamp className="h-4 w-4 text-slate-600" />
                       <span className="font-bold text-gray-900 text-lg">
                         {selectedProgram.config_json.threshold ?? 10}
                       </span>
@@ -807,11 +812,13 @@ export default function ProgramsPage() {
                       <AppleCard
                         businessName={business?.name ?? "Votre établissement"}
                         logoUrl={business?.logo_url ?? null}
+                        coverPhotoUrl={business?.cover_photo_url ?? null}
                         programName={selectedProgram.name}
                         threshold={selectedProgram.config_json.threshold ?? 10}
                         rewardLabel={selectedProgram.config_json.reward_label ?? "Récompense"}
                         bgColor={editBgColor}
                         textColor={editTextColor}
+                        qrValue={programJoinUrl || undefined}
                       />
                     </div>
                     {/* Google Wallet */}
@@ -828,6 +835,7 @@ export default function ProgramsPage() {
                       <GoogleCard
                         businessName={business?.name ?? "Votre établissement"}
                         logoUrl={business?.logo_url ?? null}
+                        coverPhotoUrl={business?.cover_photo_url ?? null}
                         programName={selectedProgram.name}
                         threshold={selectedProgram.config_json.threshold ?? 10}
                         rewardLabel={selectedProgram.config_json.reward_label ?? "Récompense"}
@@ -874,7 +882,7 @@ export default function ProgramsPage() {
                       {/* Color picker personnalisé */}
                       <label className="relative cursor-pointer">
                         <div
-                          className="w-8 h-8 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-blue-400 transition-colors text-xs"
+                          className="w-8 h-8 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-slate-400 transition-colors text-xs"
                           style={!COLOR_PRESETS.includes(editBgColor) ? { background: editBgColor, boxShadow: `0 0 0 2px white, 0 0 0 4px ${editBgColor}` } : {}}
                         >
                           {COLOR_PRESETS.includes(editBgColor) ? "+" : ""}
@@ -911,7 +919,7 @@ export default function ProgramsPage() {
                           disabled={!isOwner}
                           className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm transition-colors ${
                             editTextColor === val
-                              ? "border-blue-500 bg-blue-50 text-blue-700 font-medium"
+                              ? "border-slate-500 bg-slate-100 text-emerald-700 font-medium"
                               : "border-gray-200 text-gray-600 hover:border-gray-300"
                           }`}
                         >
@@ -935,7 +943,7 @@ export default function ProgramsPage() {
                         type="button"
                         onClick={saveDesign}
                         disabled={!designDirty || designSaving}
-                        className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        className="py-2 px-4 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors"
                       >
                         {designSaving ? "Enregistrement…" : "Enregistrer le design"}
                       </button>
@@ -1003,7 +1011,7 @@ export default function ProgramsPage() {
                         <button
                           type="submit"
                           disabled={!editDirty}
-                          className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                          className="py-2 px-4 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors"
                         >
                           Suivant →
                         </button>
@@ -1057,7 +1065,7 @@ export default function ProgramsPage() {
                         <button
                           onClick={confirmEdit}
                           disabled={editSaving}
-                          className="py-2 px-4 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                          className="py-2 px-4 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors"
                         >
                           {editSaving ? "Enregistrement…" : "Confirmer la modification"}
                         </button>
@@ -1218,76 +1226,90 @@ const COLOR_PRESETS = [
 interface CardPreviewProps {
   businessName: string;
   logoUrl: string | null;
+  coverPhotoUrl: string | null;
   programName: string;
   threshold: number;
   rewardLabel: string;
   bgColor: string;
   textColor: "light" | "dark";
+  qrValue?: string;
 }
 
 // ─── Apple Wallet mockup ──────────────────────────────────────────────────────
 
-function AppleCard({ businessName, logoUrl, programName, threshold, rewardLabel, bgColor, textColor }: CardPreviewProps) {
+function AppleCard({ businessName, logoUrl, coverPhotoUrl, programName, threshold, rewardLabel, bgColor, textColor, qrValue }: CardPreviewProps) {
   const tc  = textColor === "light" ? "#ffffff" : "#111827";
   const dim = textColor === "light" ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.4)";
   const filled = Math.min(Math.ceil(threshold * 0.55), threshold);
-  const dots   = Math.min(threshold, 10);
+  const dots = Math.min(threshold, 10);
+  const row1Count = Math.ceil(dots / 2);
+  const row2Count = dots - row1Count;
 
   return (
     <div
       className="w-full max-w-[260px] mx-auto rounded-[22px] overflow-hidden shadow-xl select-none"
       style={{ backgroundColor: bgColor }}
     >
-      {/* Header */}
+      {/* Header : logo + nom + compteur tampons */}
       <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
         {logoUrl
-          ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" />
-          : <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)" }}>
+          ? <img src={logoUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+          : <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)" }}>
               <Store className="h-4 w-4" style={{ color: tc }} />
             </div>
         }
         <span className="flex-1 min-w-0 text-[13px] font-semibold truncate" style={{ color: tc }}>
           {businessName}
         </span>
-        <svg viewBox="0 0 20 14" className="h-3.5 w-3.5 shrink-0" style={{ opacity: 0.55 }}>
-          <rect width="20" height="14" rx="2.5" fill={tc} />
-          <rect y="4" width="20" height="3.5" fill={bgColor} />
-          <circle cx="15" cy="10" r="2.5" fill={bgColor} opacity="0.6" />
-        </svg>
+        <span className="text-[13px] font-bold shrink-0" style={{ color: tc }}>{filled}/{threshold}</span>
       </div>
 
-      <div className="mx-4 mb-3" style={{ height: 1, background: "rgba(255,255,255,0.12)" }} />
-
-      <div className="px-4 pb-3">
-        <p className="text-[9px] uppercase tracking-[0.12em] mb-0.5" style={{ color: dim }}>Programme</p>
-        <p className="text-[13px] font-bold mb-3.5" style={{ color: tc }}>{programName}</p>
-
-        <p className="text-[9px] uppercase tracking-[0.12em] mb-2" style={{ color: dim }}>Tampons</p>
-        <div className="flex flex-wrap gap-1.5 mb-1.5">
-          {Array.from({ length: dots }).map((_, i) => (
-            <div
-              key={i}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold"
-              style={i < filled
-                ? { background: tc, color: bgColor }
-                : { background: "rgba(255,255,255,0.10)", border: `1px solid rgba(255,255,255,0.22)`, color: dim }
-              }
-            >
-              {i < filled ? "✓" : ""}
+      {/* Strip image — photo de couverture avec overlay tampons */}
+      <div className="w-full h-[120px] relative overflow-hidden" style={!coverPhotoUrl ? { background: "rgba(255,255,255,0.07)" } : undefined}>
+        {coverPhotoUrl && (
+          <img src={coverPhotoUrl} alt="" className="w-full h-full object-cover" />
+        )}
+        {/* Overlay tampons — 2 lignes égales */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+          {[Array.from({ length: row1Count }, (_, i) => i), Array.from({ length: row2Count }, (_, i) => row1Count + i)].map((row, rowIdx) => (
+            <div key={rowIdx} className="flex gap-4">
+              {row.map((i) => (
+                <div
+                  key={i}
+                  className="w-6 h-6 rounded-full border-2 flex items-center justify-center text-[8px] font-bold"
+                  style={i < filled
+                    ? { borderColor: "rgba(255,255,255,0.9)", background: "rgba(255,255,255,0.9)", color: "#111" }
+                    : { borderColor: "rgba(255,255,255,0.85)", background: "rgba(255,255,255,0.05)" }
+                  }
+                >
+                  {i < filled ? "✓" : ""}
+                </div>
+              ))}
             </div>
           ))}
-          {threshold > 10 && (
-            <span className="text-[9px] self-center ml-1" style={{ color: dim }}>+{threshold - 10}</span>
-          )}
         </div>
-        <p className="text-[10px]" style={{ color: dim }}>
-          {filled} / {threshold} — <span style={{ color: tc }}>{rewardLabel}</span>
-        </p>
       </div>
 
-      <div className="mx-3 mb-3 bg-white rounded-xl p-3 flex flex-col items-center gap-1">
-        <QrSvg size={56} />
-        <p className="text-[8px] text-gray-400 tracking-wide">QR Code</p>
+      {/* Champs programme + récompense côte à côte */}
+      <div className="px-4 pt-3 pb-3 grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-[9px] uppercase tracking-[0.12em] mb-0.5" style={{ color: dim }}>Programme</p>
+          <p className="text-[12px] font-bold truncate" style={{ color: tc }}>{programName}</p>
+        </div>
+        <div>
+          <p className="text-[9px] uppercase tracking-[0.12em] mb-0.5" style={{ color: dim }}>Récompense</p>
+          <p className="text-[12px] font-bold truncate" style={{ color: tc }}>{rewardLabel}</p>
+        </div>
+      </div>
+
+      {/* QR code — fond blanc arrondi comme sur le vrai pass */}
+      <div className="flex justify-center pb-5 pt-1 px-4">
+        <div className="bg-white rounded-2xl p-3">
+          {qrValue
+            ? <QRCodeSVG value={qrValue} size={90} level="M" bgColor="#ffffff" fgColor="#111827" />
+            : <QrSvg size={90} />
+          }
+        </div>
       </div>
     </div>
   );
@@ -1295,7 +1317,7 @@ function AppleCard({ businessName, logoUrl, programName, threshold, rewardLabel,
 
 // ─── Google Wallet mockup ─────────────────────────────────────────────────────
 
-function GoogleCard({ businessName, logoUrl, programName, threshold, rewardLabel, bgColor, textColor }: CardPreviewProps) {
+function GoogleCard({ businessName, logoUrl, coverPhotoUrl, programName, threshold, rewardLabel, bgColor, textColor }: CardPreviewProps) {
   const tc     = textColor === "light" ? "#ffffff" : "#111827";
   const filled = Math.min(Math.ceil(threshold * 0.55), threshold);
 
@@ -1311,6 +1333,13 @@ function GoogleCard({ businessName, logoUrl, programName, threshold, rewardLabel
           <p className="text-[10px] truncate" style={{ color: tc, opacity: 0.7 }}>{programName}</p>
         </div>
       </div>
+
+      {/* Photo de couverture */}
+      {coverPhotoUrl && (
+        <div className="w-full h-[80px] overflow-hidden">
+          <img src={coverPhotoUrl} alt="" className="w-full h-full object-cover" />
+        </div>
+      )}
 
       <div className="px-4 py-3.5 space-y-2.5">
         <div className="flex items-center justify-between">

@@ -350,7 +350,7 @@ export default function BusinessPage() {
                 {nameLocked ? (
                   <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                 ) : gmbLoading ? (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
                 ) : null}
               </div>
               {nameLocked ? (
@@ -379,7 +379,7 @@ export default function BusinessPage() {
                     key={r.place_id}
                     type="button"
                     onClick={() => selectGmbPlace(r.place_id)}
-                    className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                    className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-100 transition-colors border-b border-gray-50 last:border-0"
                   >
                     <Search className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
                     <div className="min-w-0">
@@ -472,7 +472,7 @@ export default function BusinessPage() {
           <div className="space-y-2">
             {activePrograms.map((p) => (
               <div key={p.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2.5">
-                <Stamp className="h-4 w-4 text-blue-500 shrink-0" />
+                <Stamp className="h-4 w-4 text-slate-600 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <span className="text-sm font-medium text-gray-900">{p.name}</span>
                   <span className="ml-2 text-xs text-gray-400">
@@ -493,7 +493,7 @@ export default function BusinessPage() {
           </span>
           <Link
             href="/dashboard/programs"
-            className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium text-emerald-500 hover:text-emerald-700 transition-colors"
           >
             Gérer les programmes
             <ArrowRight className="h-3.5 w-3.5" />
@@ -540,10 +540,10 @@ export default function BusinessPage() {
 // ─── Composants utilitaires ───────────────────────────────────────────────────
 
 const inputClass =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";
 
 const btnPrimary =
-  "py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors";
+  "py-2 px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors";
 
 function Field({ label, children, missing }: { label: string; children: React.ReactNode; missing?: boolean }) {
   return (
@@ -576,12 +576,12 @@ function Section({
       id={id}
       className={`bg-white rounded-xl overflow-hidden scroll-mt-6 border-2 transition-all duration-500 ${
         highlighted
-          ? "border-blue-400 shadow-md shadow-blue-100"
+          ? "border-slate-400 shadow-md shadow-slate-300"
           : "border-gray-200 shadow-none"
       }`}
     >
       <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
-        <Icon className="h-4 w-4 text-blue-600" />
+        <Icon className="h-4 w-4 text-emerald-500" />
         <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
       </div>
       <div className="p-6">{children}</div>
@@ -613,7 +613,7 @@ function StepProgress({
         <p className="text-xs text-gray-400">{desc}</p>
       </div>
       {!done && (
-        <span className="text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <span className="text-xs text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           Configurer →
         </span>
       )}
@@ -644,8 +644,13 @@ function LogoUploadSection({
   const [error, setError]         = useState<string | null>(null);
   const [success, setSuccess]     = useState(false);
 
-  // Synchroniser si le parent change (ex: après chargement initial)
-  useEffect(() => { setPreview(currentLogoUrl); }, [currentLogoUrl]);
+  // Synchroniser si le parent change, SAUF si on a déjà un blob local (upload récent)
+  // — évite d'écraser le blob frais avec l'URL R2 potentiellement en cache navigateur
+  useEffect(() => {
+    if (!preview?.startsWith("blob:")) {
+      setPreview(currentLogoUrl);
+    }
+  }, [currentLogoUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -693,7 +698,8 @@ function LogoUploadSection({
       }
 
       onUploaded(data.logo_url);
-      setPreview(data.logo_url);
+      // Ne pas remplacer le blob preview — le blob affiche déjà la nouvelle image.
+      // setPreview(data.logo_url) causerait un flash vers la version en cache du navigateur.
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch {
@@ -736,7 +742,7 @@ function LogoUploadSection({
           ) : (
             <div
               onClick={() => inputRef.current?.click()}
-              className="w-24 h-24 rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors"
+              className="w-24 h-24 rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-slate-400 hover:text-slate-600 transition-colors"
             >
               <Store className="h-7 w-7" />
               <span className="text-xs">Logo</span>
@@ -746,7 +752,7 @@ function LogoUploadSection({
           {/* Spinner pendant l'upload */}
           {uploading && (
             <div className="absolute inset-0 rounded-2xl bg-white/80 flex items-center justify-center">
-              <div className="h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="h-6 w-6 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
         </div>
@@ -887,7 +893,7 @@ function CoverPhotoUploadSection({
           ) : (
             <div
               onClick={() => inputRef.current?.click()}
-              className="w-24 h-16 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition-colors"
+              className="w-24 h-16 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer hover:border-slate-400 hover:text-slate-600 transition-colors"
             >
               <Store className="h-5 w-5" />
               <span className="text-xs">Photo</span>
@@ -895,7 +901,7 @@ function CoverPhotoUploadSection({
           )}
           {uploading && (
             <div className="absolute inset-0 rounded-xl bg-white/80 flex items-center justify-center">
-              <div className="h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <div className="h-6 w-6 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
         </div>
@@ -986,7 +992,7 @@ function GmbPhotoModal({
                 type="button"
                 onClick={() => handleSelect(url)}
                 disabled={applying !== null}
-                className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 hover:border-blue-400 hover:scale-[1.02] transition-all disabled:opacity-60 group"
+                className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 hover:border-slate-400 hover:scale-[1.02] transition-all disabled:opacity-60 group"
               >
                 <img
                   src={url}
@@ -1002,7 +1008,7 @@ function GmbPhotoModal({
                 {/* Spinner si en cours d'application */}
                 {applying === url && (
                   <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                    <div className="h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <div className="h-6 w-6 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
                   </div>
                 )}
               </button>
@@ -1094,7 +1100,7 @@ function QrRegistrationSection({
             <button
               onClick={copyLink}
               title="Copier le lien"
-              className="text-gray-400 hover:text-blue-600 transition-colors shrink-0"
+              className="text-gray-400 hover:text-emerald-500 transition-colors shrink-0"
             >
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
             </button>
@@ -1104,7 +1110,7 @@ function QrRegistrationSection({
           <div className="flex flex-wrap gap-3">
             <button
               onClick={handlePrint}
-              className="py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="py-2 px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition-colors"
             >
               Imprimer le QR code
             </button>

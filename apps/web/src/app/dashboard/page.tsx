@@ -56,7 +56,7 @@ const ESTABLISHMENT_LABELS: Record<string, string> = {
 
 const PLAN_STYLES: Record<Plan, { label: string; className: string }> = {
   STARTER:  { label: "Starter",  className: "bg-gray-100 text-gray-600" },
-  PRO:      { label: "Pro",      className: "bg-blue-100 text-blue-700" },
+  PRO:      { label: "Pro",      className: "bg-slate-200 text-emerald-700" },
   BUSINESS: { label: "Business", className: "bg-violet-100 text-violet-700" },
 };
 
@@ -121,7 +121,7 @@ export default function DashboardPage() {
         {/* ── Infos générales ── */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
-            <Store className="h-4 w-4 text-blue-600" />
+            <Store className="h-4 w-4 text-emerald-500" />
             <h2 className="text-sm font-semibold text-gray-900">Mon établissement</h2>
           </div>
           <div className="p-6">
@@ -141,8 +141,8 @@ export default function DashboardPage() {
                       className="w-16 h-16 rounded-xl object-cover border border-gray-200 group-hover:opacity-75 transition-opacity"
                     />
                   ) : (
-                    <div className="w-16 h-16 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center group-hover:border-blue-400 group-hover:bg-blue-50 transition-colors">
-                      <Store className="h-7 w-7 text-gray-300 group-hover:text-blue-400 transition-colors" />
+                    <div className="w-16 h-16 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center group-hover:border-slate-400 group-hover:bg-slate-100 transition-colors">
+                      <Store className="h-7 w-7 text-gray-300 group-hover:text-slate-500 transition-colors" />
                     </div>
                   )}
                   {/* Overlay icône crayon au survol */}
@@ -212,11 +212,11 @@ export default function DashboardPage() {
         <div
           id="dashboard-qr-block"
           className={`bg-white rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${
-            highlightQr ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-100" : ""
+            highlightQr ? "ring-2 ring-slate-500 ring-offset-2 ring-offset-gray-100" : ""
           }`}
         >
           <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
-            <QrCode className="h-4 w-4 text-blue-600" />
+            <QrCode className="h-4 w-4 text-emerald-500" />
             <h2 className="text-sm font-semibold text-gray-900">QR code d'inscription</h2>
           </div>
           <div className="p-6 flex flex-col items-center gap-4">
@@ -226,10 +226,10 @@ export default function DashboardPage() {
                 <button
                   onClick={() => setQrExpanded(true)}
                   title="Agrandir le QR code"
-                  className="w-full flex flex-col items-center gap-3 p-5 border-2 border-dashed border-gray-200 rounded-2xl hover:border-blue-400 transition-colors group"
+                  className="w-full flex flex-col items-center gap-3 p-5 border-2 border-dashed border-gray-200 rounded-2xl hover:border-slate-400 transition-colors group"
                 >
                   <QRCodeSVG value={registrationUrl} size={160} className="w-full max-w-[200px]" />
-                  <p className="text-xs text-gray-400 group-hover:text-blue-500 transition-colors">
+                  <p className="text-xs text-gray-400 group-hover:text-slate-600 transition-colors">
                     Cliquer pour agrandir
                   </p>
                 </button>
@@ -244,7 +244,7 @@ export default function DashboardPage() {
                     href={registrationUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-block text-xs text-blue-600 hover:underline truncate max-w-full"
+                    className="inline-block text-xs text-emerald-500 hover:underline truncate max-w-full"
                   >
                     {registrationUrl}
                   </a>
@@ -316,7 +316,7 @@ export default function DashboardPage() {
 type Color = "blue" | "indigo" | "green";
 
 const colorMap: Record<Color, { bg: string; icon: string }> = {
-  blue:   { bg: "bg-blue-50",   icon: "text-blue-600"   },
+  blue:   { bg: "bg-slate-100",   icon: "text-emerald-500"   },
   indigo: { bg: "bg-indigo-50", icon: "text-indigo-600" },
   green:  { bg: "bg-green-50",  icon: "text-green-600"  },
 };

@@ -207,6 +207,8 @@ model Transaction {
   type        TransactionType
   delta       Int             // ex. +1, -10, +50, -100
   note        String?         // note libre (ex. "Coupe + couleur")
+  source      String?         // "DASHBOARD" | "QR_SCAN" | "API"
+  performed_by_name String?   // nom de l'employé qui a effectué l'action
 
   created_at DateTime @default(now())
 

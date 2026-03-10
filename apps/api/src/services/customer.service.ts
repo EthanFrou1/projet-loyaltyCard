@@ -117,6 +117,8 @@ export class CustomerService {
         type: t.type,
         delta: t.delta,
         note: t.note,
+        source: t.source,
+        performed_by_name: t.performed_by_name,
         created_at: t.created_at.toISOString(),
       })),
       wallet_passes: customer.wallet_passes,

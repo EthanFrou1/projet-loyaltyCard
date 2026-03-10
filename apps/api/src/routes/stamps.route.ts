@@ -10,6 +10,15 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "@loyalty/database";
 import { StampService } from "../services/stamp.service.js";
+
+async function getUserEmail(userId: string): Promise<string | null> {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    return user?.email ?? null;
+  } catch {
+    return null;
+  }
+}
 import { GoogleWalletService } from "../services/wallet-google.service.js";
 import { AppleWalletService } from "../services/wallet-apple.service.js";
 
@@ -22,11 +31,13 @@ const CustomerIdParams = z.object({
 const StampBody = z.object({
   program_id: z.string(),
   note: z.string().max(200).optional(),
+  source: z.enum(["PAGE_CLIENT", "QR_SCAN", "API"]).optional(),
 });
 
 const RedeemBody = z.object({
   program_id: z.string(),
   note: z.string().max(200).optional(),
+  source: z.enum(["PAGE_CLIENT", "QR_SCAN", "API"]).optional(),
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -66,11 +77,14 @@ export async function stampsRoutes(app: FastifyInstance) {
       });
     }
 
+    const performedByName = await getUserEmail(request.user.sub);
     const result = await stampService.addStamp(
       request.user.business_id,
       params.data.id,
       body.data.program_id,
-      body.data.note
+      body.data.note,
+      body.data.source ?? "PAGE_CLIENT",
+      performedByName ?? undefined
     );
 
     if (!result) {
@@ -105,11 +119,14 @@ export async function stampsRoutes(app: FastifyInstance) {
       });
     }
 
+    const performedByName = await getUserEmail(request.user.sub);
     const result = await stampService.redeemReward(
       request.user.business_id,
       params.data.id,
       body.data.program_id,
-      body.data.note
+      body.data.note,
+      body.data.source ?? "PAGE_CLIENT",
+      performedByName ?? undefined
     );
 
     if (!result) {

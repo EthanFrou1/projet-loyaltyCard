@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
@@ -51,13 +52,20 @@ export default function LoginPage() {
         }}
       />
       <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl animate-pulse" />
-      <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
+      <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-slate-700/20 blur-3xl animate-pulse" />
 
       <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl items-center px-4 py-0 sm:px-6 sm:py-10">
         <div className="hidden w-1/2 pr-12 lg:block">
-          <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-white">
-            FidélitéPro+
-          </p>
+          <div className="inline-flex rounded-2xl border border-white/70 bg-white/95 px-5 py-3 shadow-xl">
+            <Image
+              src="/brand/logo-horizontal.png"
+              alt="FidélitéPro+"
+              width={2035}
+              height={518}
+              className="h-8 w-auto"
+              priority
+            />
+          </div>
           <h1 className="mt-5 text-4xl font-bold leading-tight text-white">
             Transformez chaque visite en client fidélité.
           </h1>
@@ -68,9 +76,16 @@ export default function LoginPage() {
 
         <div className="w-full lg:w-1/2">
           <div className="mb-4 lg:hidden">
-            <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold tracking-wide text-white">
-              FidélitéPro+
-            </p>
+            <div className="inline-flex rounded-2xl border border-white/70 bg-white/95 px-5 py-3 shadow-xl">
+              <Image
+                src="/brand/logo-horizontal.png"
+                alt="FidélitéPro+"
+                width={2035}
+                height={518}
+                className="h-7 w-auto"
+                priority
+              />
+            </div>
             <h1 className="mt-3 text-3xl font-bold leading-tight text-white">Transformez chaque visite en client fidélité.</h1>
             <p className="mt-2 max-w-md text-sm text-slate-200">
               Gérez vos programmes de fidélité, scans et cartes Wallet depuis une interface simple.
@@ -105,7 +120,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                className="w-full rounded-lg bg-emerald-500 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
               >
                 {loading ? "Connexion..." : "Se connecter"}
               </button>
@@ -113,7 +128,7 @@ export default function LoginPage() {
 
             <p className="mt-5 text-center text-sm text-slate-500">
               Pas encore de compte ?{" "}
-              <Link href="/setup" className="font-semibold text-blue-600 hover:underline">
+              <Link href="/setup" className="font-semibold text-emerald-500 hover:underline">
                 Créer un compte
               </Link>
             </p>
@@ -160,4 +175,4 @@ function PasswordInput({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200";

@@ -37,7 +37,7 @@ export default function CustomersPage() {
         <button
           onClick={() => setShowModal(true)}
           disabled={setupBlocked}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <UserPlus className="h-4 w-4" />
           Nouveau client
@@ -63,7 +63,7 @@ export default function CustomersPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
         />
       </div>
 
@@ -99,7 +99,7 @@ export default function CustomersPage() {
                     <td className="px-6 py-4 text-sm text-gray-500">{customer.phone ?? "—"}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {customer.program_name ? (
-                        <span className="text-blue-700 font-medium">{customer.program_name}</span>
+                        <span className="text-emerald-700 font-medium">{customer.program_name}</span>
                       ) : (
                         <span className="text-gray-300">—</span>
                       )}
@@ -166,16 +166,24 @@ function CreateCustomerModal({
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const trimmedName = name.trim();
+  const trimmedPhone = phone.trim();
+  const trimmedEmail = email.trim();
+  const phoneDigits = trimmedPhone.replace(/\D/g, "");
+  const isPhoneValid = trimmedPhone === "" || (phoneDigits.length >= 10 && phoneDigits.length <= 15);
+  const isEmailValid = trimmedEmail === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+  const isFormValid = trimmedName.length >= 2 && isPhoneValid && isEmailValid;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isFormValid) return;
     setLoading(true);
     setError(null);
     try {
       await apiClient.post("/customers", {
-        name: name.trim(),
-        ...(phone.trim() && { phone: phone.trim() }),
-        ...(email.trim() && { email: email.trim() }),
+        name: trimmedName,
+        ...(trimmedPhone && { phone: trimmedPhone }),
+        ...(trimmedEmail && { email: trimmedEmail }),
       });
       onCreated();
     } catch (err) {
@@ -257,8 +265,8 @@ function CreateCustomerModal({
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className="flex-1 py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              disabled={loading || !isFormValid}
+              className="flex-1 py-2 px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Création..." : "Créer le client"}
             </button>
@@ -302,4 +310,4 @@ function StampBadge({ count, threshold }: { count: number; threshold: number }) 
 }
 
 const inputClass =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";

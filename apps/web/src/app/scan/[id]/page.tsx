@@ -168,7 +168,7 @@ export default function ScanPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="h-8 w-8 border-4 border-slate-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -181,7 +181,7 @@ export default function ScanPage() {
           <p className="text-gray-600 font-medium">{error ?? "Client introuvable"}</p>
           <button
             onClick={() => router.push("/dashboard/customers")}
-            className="text-sm text-blue-600 hover:underline"
+            className="text-sm text-emerald-500 hover:underline"
           >
             Retour aux clients
           </button>
@@ -200,7 +200,7 @@ export default function ScanPage() {
 
         {/* En-tête client */}
         <div className="bg-white rounded-2xl p-6 shadow-sm text-center space-y-1">
-          <div className="w-14 h-14 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-2xl font-bold mx-auto">
+          <div className="w-14 h-14 rounded-full bg-slate-200 text-emerald-700 flex items-center justify-center text-2xl font-bold mx-auto">
             {name.charAt(0).toUpperCase()}
           </div>
           <p className="text-lg font-semibold text-gray-900 mt-3">{name}</p>
@@ -223,7 +223,7 @@ export default function ScanPage() {
                 key={i}
                 className={`aspect-square rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-colors ${
                   i < stamp_count
-                    ? "bg-blue-600 border-blue-600 text-white"
+                    ? "bg-slate-900 border-slate-700 text-white"
                     : "border-gray-200 text-gray-300"
                 }`}
               >
@@ -235,7 +235,7 @@ export default function ScanPage() {
           {/* Barre de progression */}
           <div className="w-full bg-gray-100 rounded-full h-2">
             <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="bg-slate-900 h-2 rounded-full transition-all duration-300"
               style={{ width: `${Math.min(100, (stamp_count / threshold) * 100)}%` }}
             />
           </div>
@@ -277,7 +277,7 @@ export default function ScanPage() {
           <button
             onClick={handleStamp}
             disabled={action !== null || rewardAvailable || !!setupBlocked}
-            className="w-full py-4 bg-blue-600 text-white text-base font-semibold rounded-2xl hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            className="w-full py-4 bg-emerald-500 text-white text-base font-semibold rounded-2xl hover:bg-emerald-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
             <Stamp className="h-5 w-5" />
             {action === "stamp" ? "Ajout…" : "+ 1 Tampon"}

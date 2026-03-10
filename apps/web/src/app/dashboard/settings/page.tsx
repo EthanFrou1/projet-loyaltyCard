@@ -193,7 +193,7 @@ export default function AccountSettingsPage() {
           <InfoRow
             label="Role"
             value={
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-full">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 text-emerald-700 text-xs font-medium rounded-full">
                 <ShieldCheck className="h-3 w-3" />
                 {role || "-"}
               </span>
@@ -323,10 +323,10 @@ export default function AccountSettingsPage() {
 }
 
 const inputClass =
-  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";
 
 const btnPrimary =
-  "py-2 px-4 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors";
+  "py-2 px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors";
 
 function Section({
   title, icon: Icon, children,
@@ -338,7 +338,7 @@ function Section({
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
-        <Icon className="h-4 w-4 text-blue-600" />
+        <Icon className="h-4 w-4 text-emerald-500" />
         <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
       </div>
       <div className="p-6">{children}</div>
