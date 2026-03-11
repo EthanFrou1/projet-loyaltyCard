@@ -1,12 +1,8 @@
 "use client";
 
-/**
- * Public join page scanned from business QR.
- * Supports selecting a loyalty program when multiple are active.
- */
-
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Gift, ShieldCheck, Sparkles, StoreIcon, SearchX } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -46,15 +42,13 @@ export default function JoinPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Validation côté client pour activer le bouton
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const phoneDigits = phone.replace(/\D/g, "");
-  const phoneValid  = phoneDigits.length === 10;
+  const phoneValid = phoneDigits.length === 10;
   const isFormValid =
     firstName.trim().length >= 1 &&
     lastName.trim().length >= 1 &&
@@ -67,7 +61,7 @@ export default function JoinPage() {
   const visiblePrograms = useMemo(() => {
     if (!business) return [];
     if (!hasPresetProgram || !selectedProgramId) return business.programs ?? [];
-    return (business.programs ?? []).filter((p) => p.id === selectedProgramId);
+    return (business.programs ?? []).filter((program) => program.id === selectedProgramId);
   }, [business, hasPresetProgram, selectedProgramId]);
 
   useEffect(() => {
@@ -78,7 +72,7 @@ export default function JoinPage() {
     fetch(joinUrl)
       .then(async (res) => {
         if (res.ok) return res.json() as Promise<BusinessInfo>;
-        const json = await res.json().catch(() => null) as { code?: string; message?: string } | null;
+        const json = (await res.json().catch(() => null)) as { code?: string; message?: string } | null;
         if (json?.code === "BUSINESS_SETUP_REQUIRED") {
           setSetupBlocked(json.message ?? "Ce programme n'est pas encore disponible.");
           return null;
@@ -88,7 +82,7 @@ export default function JoinPage() {
       .then((data: BusinessInfo | null) => {
         if (!data) return;
         setBusiness(data);
-        const ids = new Set((data.programs ?? []).map((p) => p.id));
+        const ids = new Set((data.programs ?? []).map((program) => program.id));
         if (presetProgramId && ids.has(presetProgramId)) {
           setSelectedProgramId(presetProgramId);
           return;
@@ -100,13 +94,12 @@ export default function JoinPage() {
 
   const selectedProgram = useMemo(() => {
     if (!business || !selectedProgramId) return null;
-    return business.programs.find((p) => p.id === selectedProgramId) ?? null;
+    return business.programs.find((program) => program.id === selectedProgramId) ?? null;
   }, [business, selectedProgramId]);
 
-  // Couleurs de marque du programme sélectionné
-  const brandColor  = selectedProgram?.background_color ?? "#2563eb"; // blue-600 par défaut
-  const isDarkText  = selectedProgram?.text_color === "dark";
-  const textOnBrand = isDarkText ? "#111827" : "#ffffff";
+  const brandColor = selectedProgram?.background_color ?? "#10b981";
+  const isDarkText = selectedProgram?.text_color === "dark";
+  const textOnBrand = isDarkText ? "#0f172a" : "#ffffff";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -121,7 +114,7 @@ export default function JoinPage() {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
           email: email.trim(),
-          phone: phone.trim(),
+          phone: phoneDigits,
           ...(selectedProgramId && { program_id: selectedProgramId }),
         }),
       });
@@ -147,12 +140,14 @@ export default function JoinPage() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="text-center">
-          <p className="text-4xl mb-4">Search</p>
-          <h1 className="text-xl font-bold text-gray-900">Établissement introuvable</h1>
-          <p className="text-sm text-gray-500 mt-2">
-            Ce lien n'est pas valide. Demandez le QR code à votre commerçant.
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+            <SearchX className="h-8 w-8" />
+          </div>
+          <h1 className="mt-5 text-xl font-bold text-slate-900">Établissement introuvable</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Ce lien n'est pas valide. Demandez à votre commerçant de vous montrer son QR code.
           </p>
         </div>
       </div>
@@ -161,13 +156,14 @@ export default function JoinPage() {
 
   if (setupBlocked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
-          <h1 className="text-xl font-bold text-amber-900">Programme bientôt disponible</h1>
-          <p className="text-sm text-amber-800 mt-2">{setupBlocked}</p>
-          <p className="text-xs text-amber-700 mt-3">
-            Revenez dans quelques minutes ou contactez l'établissement.
-          </p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="w-full max-w-sm rounded-3xl border border-amber-200 bg-amber-50 p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/80 text-amber-600">
+            <Sparkles className="h-8 w-8" />
+          </div>
+          <h1 className="mt-5 text-xl font-bold text-amber-900">Programme bientôt disponible</h1>
+          <p className="mt-2 text-sm leading-6 text-amber-800">{setupBlocked}</p>
+          <p className="mt-3 text-xs text-amber-700">Revenez dans quelques minutes ou contactez l'établissement.</p>
         </div>
       </div>
     );
@@ -175,62 +171,88 @@ export default function JoinPage() {
 
   if (!business) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="h-8 w-8 border-4 border-slate-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-3">
-          {business.logo_url ? (
-            <img
-              src={business.logo_url}
-              alt={business.name}
-              className="w-20 h-20 rounded-2xl object-cover mx-auto shadow-sm"
-            />
-          ) : (
-            <div className="w-20 h-20 rounded-2xl bg-slate-200 flex items-center justify-center mx-auto text-3xl">
-              Shop
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eefbf4_100%)] px-4 py-6 sm:py-10">
+      <div className="mx-auto w-full max-w-md space-y-5">
+        <section className="rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="text-center">
+            {business.logo_url ? (
+              <img
+                src={business.logo_url}
+                alt={business.name}
+                className="mx-auto h-20 w-20 rounded-3xl object-cover shadow-sm ring-1 ring-slate-200"
+              />
+            ) : (
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                <StoreIcon className="h-9 w-9" />
+              </div>
+            )}
+
+            <div className="mt-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-600">Carte fidélité</p>
+              <h1 className="mt-2 text-2xl font-bold text-slate-900">{business.name}</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Créez votre carte gratuite en moins d'une minute et retrouvez-la facilement sur votre téléphone.
+              </p>
             </div>
-          )}
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{business.name}</h1>
-            <p className="text-sm text-gray-500 mt-1">Créez votre carte fidélité gratuite</p>
+          </div>
+
+          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+              <Gift className="mx-auto h-4 w-4 text-emerald-600" />
+              <p className="mt-2 text-[11px] font-medium text-slate-600">Carte gratuite</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+              <Sparkles className="mx-auto h-4 w-4 text-emerald-600" />
+              <p className="mt-2 text-[11px] font-medium text-slate-600">1 minute</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+              <ShieldCheck className="mx-auto h-4 w-4 text-emerald-600" />
+              <p className="mt-2 text-[11px] font-medium text-slate-600">Données protégées</p>
+            </div>
           </div>
 
           <div
-            className="rounded-xl px-4 py-3 text-sm font-medium"
+            className="mt-5 rounded-2xl border px-4 py-3 text-sm"
             style={{
-              backgroundColor: brandColor + "22", // ~13% opacité
-              borderWidth: 1,
-              borderStyle: "solid",
-              borderColor: brandColor + "55",     // ~33% opacité
+              backgroundColor: `${brandColor}14`,
+              borderColor: `${brandColor}33`,
               color: brandColor,
             }}
           >
-            <span className="font-semibold">{selectedProgram?.threshold ?? business.threshold} tampons</span>
-            <span> = </span>
-            <span>{selectedProgram?.reward_label ?? business.reward_label}</span>
+            <p className="font-semibold">{selectedProgram?.name ?? "Programme actif"}</p>
+            <p className="mt-1">
+              {selectedProgram?.threshold ?? business.threshold} tampons ={" "}
+              {selectedProgram?.reward_label ?? business.reward_label}
+            </p>
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">Vos informations</h2>
+            <p className="mt-1 text-sm text-slate-500">Complétez ce formulaire pour activer votre carte.</p>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {!hasPresetProgram && (business.programs?.length ?? 0) > 1 && (
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Programme de fidélité *</label>
+                <label className="mb-1 block text-xs font-medium text-slate-700">Programme de fidélité *</label>
                 <select
                   value={selectedProgramId ?? ""}
                   onChange={(e) => setSelectedProgramId(e.target.value || null)}
                   className={inputClass}
                   required
                 >
-                  {visiblePrograms.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} - {p.threshold} tampons = {p.reward_label}
+                  {visiblePrograms.map((program) => (
+                    <option key={program.id} value={program.id}>
+                      {program.name} - {program.threshold} tampons = {program.reward_label}
                     </option>
                   ))}
                 </select>
@@ -239,7 +261,7 @@ export default function JoinPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Prénom *</label>
+                <label className="mb-1 block text-xs font-medium text-slate-700">Prénom *</label>
                 <input
                   type="text"
                   required
@@ -251,7 +273,7 @@ export default function JoinPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Nom *</label>
+                <label className="mb-1 block text-xs font-medium text-slate-700">Nom *</label>
                 <input
                   type="text"
                   required
@@ -265,7 +287,7 @@ export default function JoinPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
+              <label className="mb-1 block text-xs font-medium text-slate-700">Email *</label>
               <input
                 type="email"
                 required
@@ -275,51 +297,48 @@ export default function JoinPage() {
                 className={inputClass}
                 autoComplete="email"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Pour retrouver votre carte si vous changez de téléphone.
+              <p className="mt-1 text-xs text-slate-400">
+                Pratique pour récupérer votre carte en cas de changement de téléphone.
               </p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Téléphone *
-              </label>
+              <label className="mb-1 block text-xs font-medium text-slate-700">Téléphone *</label>
               <input
                 type="tel"
-                placeholder="06 12 34 56 78"
+                required
+                placeholder="0612345678"
                 value={phone}
                 onChange={(e) => {
-                  // Autoriser uniquement chiffres et espaces, max 10 chiffres
-                  const raw = e.target.value.replace(/[^\d\s]/g, "");
-                  const digits = raw.replace(/\s/g, "");
-                  if (digits.length <= 10) setPhone(raw);
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  setPhone(digits);
                 }}
-                className={`${inputClass} ${phone && !phoneValid ? "border-red-400 focus:ring-red-400" : ""}`}
+                className={`${inputClass} ${phone && !phoneValid ? "border-red-300 focus:border-red-400 focus:ring-red-200" : ""}`}
                 autoComplete="tel"
-                inputMode="tel"
+                inputMode="numeric"
+                pattern="[0-9]{10}"
+                maxLength={10}
               />
               {phone && !phoneValid && (
-                <p className="text-xs text-red-500 mt-1">Numéro invalide - 10 chiffres requis.</p>
+                <p className="mt-1 text-xs text-red-500">Numéro invalide : 10 chiffres requis.</p>
               )}
             </div>
 
-            {/* Case RGPD */}
-            <label className="flex items-start gap-3 cursor-pointer group">
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3">
               <input
                 type="checkbox"
                 checked={consent}
                 onChange={(e) => setConsent(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-slate-700 focus:ring-slate-500 cursor-pointer shrink-0"
+                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
               />
-              <span className="text-xs text-gray-500 leading-relaxed">
-                J'accepte que mes données (nom, email, téléphone) soient conservées
-                par <strong>{business.name}</strong> pour gérer ma carte fidélité.
-                Elles ne seront jamais partagées à des tiers.
+              <span className="text-xs leading-relaxed text-slate-500">
+                J'accepte que mes données (nom, email, téléphone) soient conservées par{" "}
+                <strong>{business.name}</strong> pour gérer ma carte fidélité. Elles ne seront pas partagées à des tiers.
               </span>
             </label>
 
             {error && (
-              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 {error}
               </div>
             )}
@@ -327,17 +346,17 @@ export default function JoinPage() {
             <button
               type="submit"
               disabled={!isFormValid || loading}
-              className="w-full py-3 px-4 font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-opacity text-sm"
+              className="w-full rounded-2xl px-4 py-3 text-sm font-semibold transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
               style={{ backgroundColor: brandColor, color: textOnBrand }}
             >
-              {loading ? "Création de votre carte..." : "Obtenir ma carte fidélité ->"}
+              {loading ? "Création de votre carte..." : "Créer ma carte gratuite"}
             </button>
           </form>
-        </div>
+        </section>
       </div>
     </div>
   );
 }
 
 const inputClass =
-  "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";
+  "w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100";

@@ -81,6 +81,31 @@ export default function DashboardPage() {
   const activeProgram = business?.programs?.find((p) => p.status === "ACTIVE");
   const settings = business?.settings_json ?? {};
 
+  function handlePrintQr() {
+    if (!registrationUrl) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`
+      <html><head><title>QR Code - ${business?.name ?? "Inscription"}</title>
+      <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column;
+               align-items: center; justify-content: center; min-height: 100vh;
+               margin: 0; background: #fff; padding: 24px; box-sizing: border-box; }
+        h1 { font-size: 22px; margin-bottom: 8px; text-align: center; }
+        p { font-size: 13px; color: #666; margin-bottom: 24px; text-align: center; max-width: 420px; }
+        img { width: 260px; height: 260px; }
+        small { margin-top: 16px; font-size: 11px; color: #999; word-break: break-all; text-align: center; }
+      </style></head><body>
+        <h1>${business?.name ?? "Votre établissement"}</h1>
+        <p>Scannez ce QR code pour créer votre carte de fidélité</p>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(registrationUrl)}" />
+        <small>${registrationUrl}</small>
+      </body></html>
+    `);
+    win.document.close();
+    win.print();
+  }
+
   useEffect(() => {
     if (searchParams.get("focus") !== "qr") return;
     const timer = window.setTimeout(() => {
@@ -98,7 +123,7 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
 
       {/* En-tête */}
       <div>
@@ -109,7 +134,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats rapides */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard label="Clients enregistrés"  value={statsLoading ? null : (stats?.customers_total ?? 0)}  icon={Users}  color="blue"   />
         <StatCard label="Tampons aujourd'hui"  value={statsLoading ? null : (stats?.stamps_today ?? 0)}      icon={Stamp}  color="indigo" />
         <StatCard label="Récompenses ce mois"  value={statsLoading ? null : (stats?.rewards_this_month ?? 0)} icon={Gift}   color="green"  />
@@ -120,11 +145,11 @@ export default function DashboardPage() {
 
         {/* ── Infos générales ── */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-100 sm:px-6">
             <Store className="h-4 w-4 text-emerald-500" />
             <h2 className="text-sm font-semibold text-gray-900">Mon établissement</h2>
           </div>
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {business ? (
               <div className="flex items-start gap-4">
 
@@ -215,11 +240,11 @@ export default function DashboardPage() {
             highlightQr ? "ring-2 ring-slate-500 ring-offset-2 ring-offset-gray-100" : ""
           }`}
         >
-          <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-100 sm:px-6">
             <QrCode className="h-4 w-4 text-emerald-500" />
             <h2 className="text-sm font-semibold text-gray-900">QR code d'inscription</h2>
           </div>
-          <div className="p-6 flex flex-col items-center gap-4">
+          <div className="p-4 sm:p-6 flex flex-col items-center gap-4">
             {registrationUrl ? (
               <>
                 {/* QR cliquable — pleine largeur */}
@@ -249,6 +274,13 @@ export default function DashboardPage() {
                     {registrationUrl}
                   </a>
                 </div>
+                <button
+                  type="button"
+                  onClick={handlePrintQr}
+                  className="w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600"
+                >
+                  Imprimer le QR code
+                </button>
               </>
             ) : (
               /* Skeleton */
@@ -267,7 +299,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Activité récente */}
-      <div className="bg-white rounded-xl p-6 shadow-sm">
+      <div className="bg-white rounded-xl p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Activité récente</h2>
         <p className="text-sm text-gray-400">
           Les transactions apparaîtront ici au fil des visites clients.

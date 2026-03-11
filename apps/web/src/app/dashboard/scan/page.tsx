@@ -54,6 +54,7 @@ export default function DashboardScanPage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
 
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -151,7 +152,7 @@ export default function DashboardScanPage() {
         setActiveProgram({
           id: p.id,
           threshold: p.config_json?.threshold ?? 10,
-          reward_label: p.config_json?.reward_label ?? "Recompense",
+          reward_label: p.config_json?.reward_label ?? "Récompense",
         });
       })
       .catch(() => {});
@@ -208,7 +209,7 @@ export default function DashboardScanPage() {
       const exact = (json.data ?? []).filter((c) => (c.email ?? "").toLowerCase() === candidate);
 
       if (exact.length === 0) {
-        setEmailError("Aucun client trouve avec cet email.");
+        setEmailError("Aucun client trouve avec cet email. Verifiez la saisie ou creez le client.");
         setCustomer(null);
         return;
       }
@@ -220,7 +221,7 @@ export default function DashboardScanPage() {
       }
 
       setEmailResults(exact);
-      setEmailError("Plusieurs clients avec cet email. Choisissez le bon profil.");
+      setEmailError("Plusieurs clients correspondent a cet email. Choisissez le bon profil.");
       setCustomer(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erreur de recherche.";
@@ -256,8 +257,8 @@ export default function DashboardScanPage() {
       setResult({
         ok: true,
         message: json.reward_unlocked
-          ? "Recompense debloquee."
-          : `Tampon ajoute (${nextCount}).`,
+          ? "Récompense débloquée. Vous pouvez maintenant la valider."
+          : `Tampon ajouté avec succès (${nextCount}/${threshold}).`,
       });
     } catch (err) {
       setResult({ ok: false, message: err instanceof Error ? err.message : "Erreur." });
@@ -288,7 +289,7 @@ export default function DashboardScanPage() {
 
       const nextCount = json.customer?.stamp_count ?? 0;
       setCustomer((prev) => (prev ? { ...prev, stamp_count: nextCount } : prev));
-      setResult({ ok: true, message: "Recompense consommee. Compteur remis a 0." });
+      setResult({ ok: true, message: "Récompense validée. Le compteur a été remis à zéro." });
     } catch (err) {
       setResult({ ok: false, message: err instanceof Error ? err.message : "Erreur." });
     } finally {
@@ -300,7 +301,7 @@ export default function DashboardScanPage() {
   const rewardAvailable = (customer?.stamp_count ?? 0) >= threshold;
 
   return (
-    <div className="w-full py-6 space-y-6">
+    <div className="w-full py-4 space-y-5 sm:py-6 sm:space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Scanner un client</h1>
         <p className="text-sm text-gray-500 mt-1">
@@ -345,8 +346,27 @@ export default function DashboardScanPage() {
           )}
         </div>
       ) : (
-        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 sm:p-6 text-sm text-gray-600">
-          Sur ordinateur, la camera est desactivee. Utilisez la recherche par email client.
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-gray-900">Mode comptoir sur ordinateur</p>
+              <p className="text-sm text-gray-600">
+                Recherchez un client par email, ouvrez sa fiche instantanément, puis ajoutez le tampon depuis cet écran.
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                <span className="rounded-full bg-gray-100 px-2.5 py-1">1. Rechercher</span>
+                <span className="rounded-full bg-gray-100 px-2.5 py-1">2. Vérifier le client</span>
+                <span className="rounded-full bg-gray-100 px-2.5 py-1">3. Ajouter le tampon</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => emailInputRef.current?.focus()}
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600"
+            >
+              Rechercher un client
+            </button>
+          </div>
         </div>
       )}
 
@@ -358,6 +378,7 @@ export default function DashboardScanPage() {
 
         <div className="flex flex-col sm:flex-row gap-2">
           <input
+            ref={emailInputRef}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -380,12 +401,15 @@ export default function DashboardScanPage() {
         )}
 
         {emailResults.length > 1 && (
-          <div className="space-y-2">
+          <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-medium text-amber-800">
+              Plusieurs profils ont ete trouves. Selectionnez le bon client avant de continuer.
+            </p>
             {emailResults.map((hit) => (
               <button
                 key={hit.id}
                 onClick={() => loadCustomer(hit.id)}
-                className="w-full text-left rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50"
+                className="w-full text-left rounded-lg border border-amber-200 bg-white px-3 py-2 hover:bg-amber-50"
               >
                 <p className="text-sm font-semibold text-gray-900">{hit.name}</p>
                 <p className="text-xs text-gray-500">{hit.email ?? "Sans email"}</p>
@@ -397,7 +421,11 @@ export default function DashboardScanPage() {
 
       {(customerLoading || customer) && (
         <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 space-y-4">
-          {customerLoading && <p className="text-sm text-gray-500">Chargement fiche client...</p>}
+          {customerLoading && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Chargement de la fiche client...
+            </div>
+          )}
 
           {customer && (
             <>
@@ -417,7 +445,7 @@ export default function DashboardScanPage() {
                     key={i}
                     className={`aspect-square rounded-full border-2 flex items-center justify-center text-xs font-semibold ${
                       i < customer.stamp_count
-                        ? "bg-slate-900 border-slate-700 text-white"
+                        ? "bg-emerald-500 border-emerald-500 text-white"
                         : "border-gray-200 text-gray-300"
                     }`}
                   >
@@ -428,13 +456,13 @@ export default function DashboardScanPage() {
 
               <div className="w-full bg-gray-100 rounded-full h-2">
                 <div
-                  className="bg-slate-900 h-2 rounded-full transition-all duration-300"
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${Math.min(100, (customer.stamp_count / threshold) * 100)}%` }}
                 />
               </div>
 
               <p className="text-xs text-gray-500">
-                {threshold} tampons = {activeProgram?.reward_label ?? "Recompense"}
+                {threshold} tampons = {activeProgram?.reward_label ?? "Récompense"}
               </p>
 
               {result && (
@@ -454,7 +482,7 @@ export default function DashboardScanPage() {
                 <button
                   onClick={handleStamp}
                   disabled={action !== null || rewardAvailable}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 text-white px-4 py-2 text-sm font-semibold hover:bg-emerald-600 disabled:opacity-50"
                 >
                   <Stamp className="h-4 w-4" />
                   {action === "stamp" ? "Ajout..." : "+ 1 Tampon"}
@@ -466,7 +494,7 @@ export default function DashboardScanPage() {
                     disabled={action !== null}
                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
                   >
-                    {action === "redeem" ? "Traitement..." : "Utiliser la recompense"}
+                    {action === "redeem" ? "Traitement..." : "Utiliser la récompense"}
                   </button>
                 )}
               </div>

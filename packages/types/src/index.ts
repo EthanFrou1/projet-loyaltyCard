@@ -78,8 +78,14 @@ export interface ProgramResponse {
 
 export interface CreateCustomerRequest {
   name: string;
-  phone?: string;
-  email?: string;
+  phone: string;
+  email: string;
+}
+
+export interface UpdateCustomerRequest {
+  name: string;
+  phone: string;
+  email: string;
 }
 
 export interface CustomerResponse {

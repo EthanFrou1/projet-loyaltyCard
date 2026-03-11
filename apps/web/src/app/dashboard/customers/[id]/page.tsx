@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Smartphone, CheckCircle2, Circle, ExternalLink } from "lucide-react";
+import { ArrowLeft, Smartphone, CheckCircle2, Circle, ExternalLink, Pencil } from "lucide-react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { StyledQRCode } from "@/components/styled-qr-code";
@@ -60,6 +60,8 @@ export default function CustomerDetailPage() {
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [appleHealth, setAppleHealth] = useState<AppleWalletHealth | null>(null);
   const [qrExpanded, setQrExpanded] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [redeemConfirmOpen, setRedeemConfirmOpen] = useState(false);
 
   useEffect(() => {
     fetch(`${API_URL}/api/v1/wallet/apple/health`)
@@ -144,7 +146,7 @@ export default function CustomerDetailPage() {
                 key={i}
                 className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-xs font-medium transition-colors shrink-0 ${
                   i < customer.stamp_count
-                    ? "bg-slate-900 border-slate-700 text-white"
+                    ? "border-emerald-500 bg-emerald-500 text-white"
                     : "border-gray-200 text-gray-300"
                 }`}
               >
@@ -156,13 +158,13 @@ export default function CustomerDetailPage() {
           {/* Barre de progression */}
           <div className="w-full bg-gray-100 rounded-full h-2">
             <div
-              className="bg-slate-900 h-2 rounded-full transition-all duration-300"
+              className="h-2 rounded-full bg-emerald-500 transition-all duration-300"
               style={{ width: `${Math.min(100, (customer.stamp_count / stampThreshold) * 100)}%` }}
             />
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <button
               onClick={handleStamp}
               disabled={loading !== null || rewardAvailable}
@@ -173,7 +175,7 @@ export default function CustomerDetailPage() {
 
             {rewardAvailable && (
               <button
-                onClick={handleRedeem}
+                onClick={() => setRedeemConfirmOpen(true)}
                 disabled={loading !== null}
                 className="flex-1 py-3 px-4 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
               >
@@ -237,12 +239,22 @@ export default function CustomerDetailPage() {
         document.body
       )}
       <div className="bg-white rounded-xl p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Informations</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-800">Informations</h2>
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <Pencil className="h-4 w-4" />
+            Modifier
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <InfoItem label="Téléphone" value={customer.phone ?? "—"} />
           <InfoItem label="Email" value={customer.email ?? "—"} />
           <InfoItem label="Client depuis" value={new Date(customer.created_at).toLocaleDateString("fr-FR")} />
-          <InfoItem label="Points" value={String(customer.point_count)} />
+          <InfoItem label="Passages" value={String(customer.stamp_count)} />
           <div>
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Programme</p>
             {customer.program_name ? (
@@ -260,6 +272,28 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
+      {editOpen && (
+        <EditCustomerModal
+          customer={customer}
+          onClose={() => setEditOpen(false)}
+          onUpdated={async () => {
+            setEditOpen(false);
+            await mutate();
+          }}
+        />
+      )}
+
+      {redeemConfirmOpen && (
+        <ConfirmRedeemModal
+          customerName={customer.name}
+          loading={loading === "redeem"}
+          onCancel={() => {
+            if (loading !== "redeem") setRedeemConfirmOpen(false);
+          }}
+          onConfirm={() => void handleRedeem()}
+        />
+      )}
+
       {/* Carte digitale */}
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Carte digitale</h2>
@@ -269,7 +303,7 @@ export default function CustomerDetailPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
           {/* Apple Wallet */}
-          <div className="flex items-center justify-between border border-gray-200 rounded-xl px-4 py-3">
+          <div className="flex flex-col gap-3 rounded-xl border border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <Smartphone className="h-5 w-5 text-gray-600" />
               <div>
@@ -293,7 +327,7 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* Google Wallet */}
-          <div className="flex items-center justify-between border border-gray-200 rounded-xl px-4 py-3">
+          <div className="flex flex-col gap-3 rounded-xl border border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <Smartphone className="h-5 w-5 text-gray-600" />
               <div>
@@ -324,11 +358,16 @@ export default function CustomerDetailPage() {
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Historique des transactions</h2>
         {customer.transactions.length === 0 ? (
-          <p className="text-sm text-gray-400">Aucune transaction pour l'instant</p>
+          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-center">
+            <p className="text-sm font-medium text-gray-600">Aucune transaction pour l'instant</p>
+            <p className="mt-1 text-xs text-gray-400">
+              Les ajouts de tampons et les récompenses utilisées apparaîtront ici.
+            </p>
+          </div>
         ) : (
           <ul className="divide-y divide-gray-50">
             {customer.transactions.map((t) => (
-              <li key={t.id} className="py-3 flex items-start justify-between gap-4">
+              <li key={t.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0">
                   <p className={`text-sm font-medium ${t.type === "STAMP_REDEEM" ? "text-green-700" : "text-gray-800"}`}>
                     {t.type === "STAMP_ADD" && "Tampon ajouté"}
@@ -356,7 +395,7 @@ export default function CustomerDetailPage() {
                     )}
                   </div>
                 </div>
-                <span className="text-xs text-gray-400 shrink-0 mt-0.5">
+                <span className="text-xs text-gray-400 shrink-0 mt-0.5 sm:text-right">
                   {new Date(t.created_at).toLocaleDateString("fr-FR", {
                     day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
                   })}
@@ -372,6 +411,151 @@ export default function CustomerDetailPage() {
 
 // Composants utilitaires
 
+function EditCustomerModal({
+  customer,
+  onClose,
+  onUpdated,
+}: {
+  customer: CustomerDetailResponse;
+  onClose: () => void;
+  onUpdated: () => Promise<void>;
+}) {
+  const initialName = splitCustomerName(customer.name);
+  const [firstName, setFirstName] = useState(initialName.firstName);
+  const [lastName, setLastName] = useState(initialName.lastName);
+  const [phone, setPhone] = useState(customer.phone ?? "");
+  const [email, setEmail] = useState(customer.email ?? "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const trimmedFirstName = firstName.trim();
+  const trimmedLastName = lastName.trim();
+  const trimmedPhone = phone.trim();
+  const trimmedEmail = email.trim();
+  const isPhoneValid = /^\d{10}$/.test(trimmedPhone);
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+  const isFormValid = trimmedFirstName.length >= 2 && trimmedLastName.length >= 2 && isPhoneValid && isEmailValid;
+  const isDirty =
+    trimmedFirstName !== initialName.firstName ||
+    trimmedLastName !== initialName.lastName ||
+    trimmedPhone !== (customer.phone ?? "") ||
+    trimmedEmail !== (customer.email ?? "");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isFormValid) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await apiClient.patch(`/customers/${customer.id}`, {
+        name: `${trimmedFirstName} ${trimmedLastName}`.trim(),
+        phone: trimmedPhone,
+        email: trimmedEmail,
+      });
+      await onUpdated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur lors de la mise à jour.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md space-y-5 rounded-xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Modifier le client</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            Fermer
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <CustomerField label="Prénom" required>
+            <input
+              type="text"
+              required
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className={customerInputClass}
+              autoFocus
+            />
+          </CustomerField>
+
+          <CustomerField label="Nom" required>
+            <input
+              type="text"
+              required
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className={customerInputClass}
+            />
+          </CustomerField>
+
+          <CustomerField label="Téléphone" required>
+            <input
+              type="tel"
+              required
+              inputMode="numeric"
+              pattern="[0-9]{10}"
+              maxLength={10}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              className={customerInputClass}
+            />
+          </CustomerField>
+
+          <CustomerField label="Email" required>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={customerInputClass}
+            />
+          </CustomerField>
+
+          {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !isFormValid || !isDirty}
+              className="flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Enregistrement..." : "Enregistrer"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function splitCustomerName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return { firstName: fullName.trim(), lastName: "" };
+  }
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
 function InfoItem({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div>
@@ -380,4 +564,67 @@ function InfoItem({ label, value, highlight }: { label: string; value: string; h
     </div>
   );
 }
+
+function CustomerField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-gray-700">
+        {label}
+        {required && <span className="ml-0.5 text-red-500">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+
+function ConfirmRedeemModal({
+  customerName,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  customerName: string;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading) onCancel();
+      }}
+    >
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <h3 className="text-base font-semibold text-gray-900">Consommer la r?compense ?</h3>
+        <p className="mt-2 text-sm leading-6 text-gray-500">
+          Le compteur de <strong>{customerName}</strong> sera remis ? z?ro apr?s validation.
+        </p>
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+          >
+            {loading ? "Validation..." : "Valider"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+const customerInputClass =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";
 

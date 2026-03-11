@@ -12,8 +12,14 @@ import { prisma } from "@loyalty/database";
 
 interface CreateCustomerInput {
   name: string;
-  phone?: string;
-  email?: string;
+  phone: string;
+  email: string;
+}
+
+interface UpdateCustomerInput {
+  name: string;
+  phone: string;
+  email: string;
 }
 
 interface ListOptions {
@@ -48,6 +54,40 @@ export class CustomerService {
         email: input.email,
         qr_secret: qrSecret,
       },
+    });
+
+    return this.formatCustomer(customer);
+  }
+
+  async update(businessId: string, customerId: string, input: UpdateCustomerInput) {
+    const existingCustomer = await prisma.customer.findFirst({
+      where: { id: customerId, business_id: businessId },
+      select: { id: true },
+    });
+
+    if (!existingCustomer) return null;
+
+    const existingEmail = await prisma.customer.findFirst({
+      where: {
+        business_id: businessId,
+        email: input.email,
+        NOT: { id: customerId },
+      },
+      select: { id: true },
+    });
+
+    if (existingEmail) {
+      throw Object.assign(new Error("Un client avec cet email existe déjà dans votre établissement."), { code: "EMAIL_TAKEN" });
+    }
+
+    const customer = await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        name: input.name,
+        phone: input.phone,
+        email: input.email,
+      },
+      include: { program: { select: { name: true, config_json: true } } },
     });
 
     return this.formatCustomer(customer);

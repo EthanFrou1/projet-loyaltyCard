@@ -15,14 +15,15 @@ import { CustomerService } from "../services/customer.service.js";
 
 const CreateCustomerBody = z.object({
   name: z.string().min(1).max(100),
-  phone: z.string().regex(/^\+?[\d\s\-()]{6,20}$/).optional(),
-  email: z.string().email().optional(),
+  phone: z.string().regex(/^\d{10}$/),
+  email: z.string().email(),
 });
+const UpdateCustomerBody = CreateCustomerBody;
 
 const SearchQuery = z.object({
   search: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
-  per_page: z.coerce.number().int().min(1).max(100).default(20),
+  per_page: z.coerce.number().int().min(1).max(100).default(10),
 });
 
 const CustomerIdParams = z.object({
@@ -91,5 +92,31 @@ export async function customerRoutes(app: FastifyInstance) {
     }
 
     return reply.send(customer);
+  });
+
+  // PATCH /customers/:id
+  app.patch("/:id", async (request, reply) => {
+    const params = CustomerIdParams.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({ error: "ValidationError", message: "ID invalide" });
+    }
+
+    const body = UpdateCustomerBody.safeParse(request.body);
+    if (!body.success) {
+      return reply.status(400).send({ error: "ValidationError", message: body.error.message });
+    }
+
+    try {
+      const customer = await customerService.update(request.user.business_id, params.data.id, body.data);
+      if (!customer) {
+        return reply.status(404).send({ error: "NotFound", message: "Client non trouvé" });
+      }
+      return reply.send(customer);
+    } catch (err) {
+      if (err instanceof Error && (err as NodeJS.ErrnoException & { code?: string }).code === "EMAIL_TAKEN") {
+        return reply.status(409).send({ error: "Conflict", message: err.message });
+      }
+      throw err;
+    }
   });
 }

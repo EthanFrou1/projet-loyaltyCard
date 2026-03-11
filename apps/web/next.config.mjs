@@ -9,6 +9,15 @@ const nextConfig = {
     outputFileTracingRoot: path.join(process.cwd(), "../../"),
   },
 
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.r2.dev",
+      },
+    ],
+  },
+
   // Permet d'importer des packages du monorepo sans transpilation manuelle
   transpilePackages: ["@loyalty/types"],
 

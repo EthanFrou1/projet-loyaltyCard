@@ -60,7 +60,7 @@ const navItems = [
 interface UserProfile {
   email: string;
   role: string;
-  business: { name: string; plan: string };
+  business: { name: string; plan: string; logo_url?: string | null };
   setup?: {
     requires_onboarding: boolean;
     missing_steps: string[];
@@ -76,7 +76,7 @@ const planStyles: Record<string, { label: string; className: string }> = {
   PRO: { label: "Pro", className: "bg-slate-200 text-emerald-700" },
   BUSINESS: { label: "Business", className: "bg-violet-100 text-violet-700" },
 };
-const PLAN_LIMITS: Record<string, number> = { STARTER: 1, PRO: 3, BUSINESS: Infinity };
+const PLAN_LIMITS: Record<string, number> = { STARTER: 2, PRO: 5, BUSINESS: 5 };
 
 const fallbackPlanStyle = { label: "Starter", className: "bg-gray-100 text-gray-600" };
 
@@ -141,7 +141,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (isOwner) return true;
     return !["/dashboard/business", "/dashboard/billing"].includes(item.href);
   });
-  const primaryMobileNav = visibleNavItems.slice(0, 5);
+  const mobileNavLeft = visibleNavItems.filter((item) =>
+    ["/dashboard", "/dashboard/programs"].includes(item.href)
+  );
+  const mobileNavRight = visibleNavItems.filter((item) =>
+    ["/dashboard/customers", "/dashboard/business"].includes(item.href)
+  );
+  function getMobileNavLabel(item: { href: string; label: string }) {
+    if (item.href === "/dashboard/business") return "Établissement";
+    return item.label.split(" ")[0];
+  }
   const currentPlanStyle = user?.business?.plan
     ? (planStyles[user.business.plan] ?? fallbackPlanStyle)
     : fallbackPlanStyle;
@@ -150,7 +159,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const canCreateProgram = isOwner && activeProgramCount !== null && activeProgramCount < planLimit;
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-slate-50 pt-[calc(var(--app-shell-pad)+env(safe-area-inset-top))] md:pt-0">
       <aside className="hidden lg:flex w-64 flex-col bg-gradient-to-b from-slate-800 to-slate-700 shadow-xl">
 
         {/* Logo */}
@@ -169,8 +178,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="">
               <div className="-mx-5 border-t border-white/10" />
               <div className="pt-3">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400">Etablissement</p>
-                <p className="mt-2 truncate text-base font-semibold text-white">{user.business.name}</p>
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400">Établissement</p>
+                <Link
+                  href="/dashboard/business"
+                  className="mt-2 block overflow-hidden text-ellipsis whitespace-nowrap text-base font-semibold text-white transition-colors hover:text-emerald-300"
+                >
+                  {user.business.name}
+                </Link>
               </div>
             </div>
           )}
@@ -219,8 +233,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="p-4 border-t border-white/10">
           {user ? (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-semibold shrink-0">
-                {user.email.charAt(0).toUpperCase()}
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-emerald-500 text-white text-sm font-semibold">
+                {user.business?.logo_url ? (
+                  <Image
+                    src={user.business.logo_url}
+                    alt={user.business.name || "Logo établissement"}
+                    width={32}
+                    height={32}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  user.email.charAt(0).toUpperCase()
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-white truncate">{user.email}</p>
@@ -254,7 +278,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </main>
 
-      <div className="fixed right-4 bottom-20 z-40 lg:hidden">
+      <div className="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 lg:hidden">
         {quickActionsOpen && (
           <button
             type="button"
@@ -264,7 +288,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           />
         )}
         {quickActionsOpen && (
-          <div className="absolute z-40 bottom-16 right-0 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl p-2 space-y-0.5">
+          <div className="relative z-40 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl p-2 space-y-0.5">
             <Link
               href="/dashboard/customers?new=1"
               onClick={() => setQuickActionsOpen(false)}
@@ -302,7 +326,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Link
               href="/dashboard/business"
               onClick={() => setQuickActionsOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              className="hidden items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
             >
               <Store className="h-4 w-4 text-emerald-400" />
               Mon établissement
@@ -323,20 +347,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Settings className="h-4 w-4 text-emerald-400" />
               Paramètres
             </Link>
+            <div className="my-1 border-t border-white/10" />
+            <button
+              type="button"
+              onClick={() => {
+                setQuickActionsOpen(false);
+                handleLogout();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+            >
+              <LogOut className="h-4 w-4 text-red-400" />
+              Déconnexion
+            </button>
           </div>
         )}
-        <button
-          onClick={() => setQuickActionsOpen((v) => !v)}
-          className="relative z-40 w-14 h-14 rounded-full bg-emerald-500 text-white shadow-xl flex items-center justify-center"
-          aria-label="Ouvrir les actions rapides"
-        >
-          {quickActionsOpen ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-        </button>
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-slate-900 border-t border-white/10 px-2 py-2">
         <div className="grid grid-cols-5 gap-1">
-          {primaryMobileNav.map((item) => {
+          {mobileNavLeft.map((item) => {
             const Icon = item.icon;
             const isActive = item.exact
               ? pathname === item.href
@@ -347,11 +376,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 key={item.href}
                 href={item.href}
                 className={`flex flex-col items-center justify-center gap-1 rounded-lg py-1.5 transition-colors ${
-                  isActive ? "text-amber-400" : "text-slate-400"
+                  isActive ? "text-emerald-400" : "text-slate-400"
                 }`}
               >
                 <Icon className="h-4 w-4" />
-                <span className="text-[10px] leading-none">{item.label.split(" ")[0]}</span>
+                <span className="text-[10px] leading-none">{getMobileNavLabel(item)}</span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setQuickActionsOpen((v) => !v)}
+            className="relative -mt-6 flex h-14 w-14 items-center justify-center self-center justify-self-center rounded-full bg-emerald-500 text-white shadow-xl transition-transform active:scale-95"
+            aria-label="Ouvrir les actions rapides"
+          >
+            {quickActionsOpen ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+          </button>
+          {mobileNavRight.map((item) => {
+            const Icon = item.icon;
+            const isActive = item.exact
+              ? pathname === item.href
+              : pathname === item.href || pathname.startsWith(item.href + "/");
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center justify-center gap-1 rounded-lg py-1.5 transition-colors ${
+                  isActive ? "text-emerald-400" : "text-slate-400"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="text-[10px] leading-none">{getMobileNavLabel(item)}</span>
               </Link>
             );
           })}
@@ -404,6 +460,15 @@ function OnboardingModal({ onCompleted }: { onCompleted: () => void }) {
   const thresholdOptions = STAMP_THRESHOLD_OPTIONS.includes(threshold)
     ? STAMP_THRESHOLD_OPTIONS
     : [threshold, ...STAMP_THRESHOLD_OPTIONS];
+  const onboardingPhoneDigits = bizPhone.replace(/\D/g, "");
+  const canContinueStep1 =
+    bizName.trim().length >= 2 &&
+    bizType.trim().length > 0 &&
+    bizAddress.trim().length >= 2 &&
+    onboardingPhoneDigits.length === 10;
+  const canContinueStep3 =
+    thresholdOptions.includes(threshold) &&
+    reward.trim().length >= 2;
 
   // Étape 4 — design
   const [bgColor, setBgColor] = useState("#1a1a2e");
@@ -765,11 +830,13 @@ function OnboardingModal({ onCompleted }: { onCompleted: () => void }) {
 
               {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
               <button
+                type="button"
                 onClick={() => {
                   if (bizName.trim().length < 2) { setError("Le nom doit faire au moins 2 caractères."); return; }
                   setError(null); setStep(2);
                 }}
-                className="w-full py-2.5 bg-emerald-500 text-white font-medium rounded-lg hover:bg-emerald-600 transition-colors text-sm"
+                disabled={!canContinueStep1}
+                className="w-full py-2.5 bg-emerald-500 text-white font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
               >
                 Continuer →
               </button>
@@ -994,7 +1061,8 @@ function OnboardingModal({ onCompleted }: { onCompleted: () => void }) {
                   if (reward.trim().length < 2)     { setError("Décrivez la récompense."); return; }
                   setError(null); setStep(4);
                 }}
-                  className="flex-1 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition-colors">
+                  disabled={!canContinueStep3}
+                  className="flex-1 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                   Continuer →
                 </button>
               </div>

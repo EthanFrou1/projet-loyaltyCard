@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle, Circle, Store, Star, Palette, MapPin, Phone, QrCode, Copy, Check, Upload, Trash2, Search, ArrowRight, Stamp, Lock } from "lucide-react";
+import { CheckCircle, Circle, Store, Star, Palette, MapPin, Phone, QrCode, Copy, Check, Upload, Trash2, Search, ArrowRight, Stamp, Lock, ChevronDown } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api-client";
 
@@ -55,16 +55,15 @@ interface Business {
   programs: Program[];
 }
 
-const PLAN_LIMITS: Record<string, number> = { STARTER: 1, PRO: 3, BUSINESS: Infinity };
+const PLAN_LIMITS: Record<string, number> = { STARTER: 2, PRO: 5, BUSINESS: 5 };
 
 const ESTABLISHMENT_TYPES = [
-  { value: "salon_coiffure", label: "Salon de coiffure" },
-  { value: "barbier",        label: "Barbier" },
+  { value: "salon_coiffure", label: "Salon de coiffure / Barbier" },
   { value: "institut_beaute",label: "Institut de beauté" },
   { value: "spa",            label: "Spa / Bien-être" },
   { value: "onglerie",       label: "Onglerie / Nail art" },
-  { value: "restaurant",     label: "Restaurant" },
-  { value: "cafe",           label: "Café / Boulangerie" },
+  { value: "cafe",           label: "Café / Bar / Restaurant" },
+  { value: "boulangerie",    label: "Boulangerie" },
   { value: "boutique",       label: "Boutique / Commerce" },
   { value: "autre",          label: "Autre" },
 ];
@@ -85,8 +84,10 @@ export default function BusinessPage() {
   const [saving1, setSaving1] = useState(false);
   const [saved1, setSaved1]   = useState(false);
   const [error1, setError1]   = useState<string | null>(null);
+  const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   // Snapshot des valeurs sauvegardées pour détecter les changements
   const [savedSnap, setSavedSnap] = useState({ name: "", type: "salon_coiffure", address: "", phone: "" });
+  const typeMenuRef = useRef<HTMLDivElement | null>(null);
 
 
   // Charger les données depuis l'API
@@ -131,6 +132,17 @@ export default function BusinessPage() {
         }
       })
       .catch(() => setLoadError(true));
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!typeMenuRef.current?.contains(event.target as Node)) {
+        setIsTypeMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // ── Sauvegarder les infos générales ─────────────────────────────────────────
@@ -249,6 +261,12 @@ export default function BusinessPage() {
 
   // ── Détection de changements dans le formulaire général ─────────────────────
   const nameLocked = business?.name_locked ?? false;
+  const phoneDigits = phone.replace(/\D/g, "");
+  const isGeneralInfoValid =
+    (nameLocked || name.trim().length >= 2) &&
+    type.trim().length > 0 &&
+    address.trim().length >= 2 &&
+    phoneDigits.length === 10;
   const isDirty =
     (!nameLocked && name.trim() !== savedSnap.name) ||
     type            !== savedSnap.type    ||
@@ -295,7 +313,7 @@ export default function BusinessPage() {
       </div>
 
       {/* Indicateur de progression */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
         {allDone ? (
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center shrink-0">
@@ -412,15 +430,54 @@ export default function BusinessPage() {
           </div>
 
           <Field label="Type d'établissement">
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className={inputClass}
-            >
-              {ESTABLISHMENT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
+            <div ref={typeMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsTypeMenuOpen((open) => !open)}
+                aria-haspopup="listbox"
+                aria-expanded={isTypeMenuOpen}
+                className={`${inputClass} flex items-center justify-between gap-2 text-left ${
+                  isTypeMenuOpen ? "border-emerald-400 ring-2 ring-emerald-100" : ""
+                }`}
+              >
+                <span>{ESTABLISHMENT_TYPES.find((item) => item.value === type)?.label ?? "Choisir un type"}</span>
+                <ChevronDown
+                  className={`h-4 w-4 text-gray-400 transition-transform ${
+                    isTypeMenuOpen ? "rotate-180 text-emerald-600" : ""
+                  }`}
+                />
+              </button>
+
+              {isTypeMenuOpen && (
+                <div className="absolute left-0 top-[calc(100%+0.25rem)] z-20 w-full overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-[0_14px_36px_rgba(15,23,42,0.16)]">
+                  <div className="p-1.5">
+                    {ESTABLISHMENT_TYPES.map((item) => {
+                      const isSelected = item.value === type;
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => {
+                            setType(item.value);
+                            setIsTypeMenuOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                            isSelected
+                              ? "bg-emerald-500 text-white shadow-sm"
+                              : "text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"
+                          }`}
+                        >
+                          <span>{item.label}</span>
+                          {isSelected && <Check className="h-4 w-4 text-emerald-50" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </Field>
 
           <Field label="Adresse" missing={!address.trim()}>
@@ -456,7 +513,7 @@ export default function BusinessPage() {
           {error1 && <ErrorBox message={error1} />}
 
           <div className="flex items-center gap-3">
-            <button type="submit" disabled={saving1 || !isDirty} className={btnPrimary}>
+            <button type="submit" disabled={saving1 || !isDirty || !isGeneralInfoValid} className={btnPrimary}>
               {saving1 ? "Enregistrement…" : "Enregistrer"}
             </button>
             {saved1 && <span className="text-sm text-green-600 font-medium">Sauvegardé ✓</span>}
@@ -467,7 +524,12 @@ export default function BusinessPage() {
       {/* ── Section 2 : Programmes de fidélité (résumé + lien) ── */}
       <Section id="section-programs" title="Programmes de fidélité" icon={Star} highlighted={highlightedSection === "section-programs"}>
         {activePrograms.length === 0 ? (
-          <p className="text-sm text-gray-400">Aucun programme actif.</p>
+          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-5 text-center">
+            <p className="text-sm font-medium text-gray-700">Aucun programme actif</p>
+            <p className="mt-1 text-xs text-gray-400">
+              Créez votre premier programme pour finaliser votre établissement.
+            </p>
+          </div>
         ) : (
           <div className="space-y-2">
             {activePrograms.map((p) => (
@@ -574,7 +636,7 @@ function Section({
   return (
     <div
       id={id}
-      className={`bg-white rounded-xl overflow-hidden scroll-mt-6 border-2 transition-all duration-500 ${
+      className={`bg-white rounded-xl overflow-visible scroll-mt-6 border-2 transition-all duration-500 ${
         highlighted
           ? "border-slate-400 shadow-md shadow-slate-300"
           : "border-gray-200 shadow-none"
@@ -636,13 +698,14 @@ function LogoUploadSection({
   onUploaded,
 }: {
   currentLogoUrl: string | null;
-  onUploaded: (url: string) => void;
+  onUploaded: (url: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview]     = useState<string | null>(currentLogoUrl);
   const [uploading, setUploading] = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [success, setSuccess]     = useState(false);
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
 
   // Synchroniser si le parent change, SAUF si on a déjà un blob local (upload récent)
   // — évite d'écraser le blob frais avec l'URL R2 potentiellement en cache navigateur
@@ -712,10 +775,17 @@ function LogoUploadSection({
     }
   }
 
-  function handleRemove() {
-    setPreview(null);
-    onUploaded("");
-    if (inputRef.current) inputRef.current.value = "";
+  async function handleRemove() {
+    setError(null);
+    setSuccess(false);
+    try {
+      await apiClient.patch("/business", { logo_url: null });
+      setPreview(null);
+      onUploaded(null);
+      if (inputRef.current) inputRef.current.value = "";
+    } catch {
+      setError("Impossible de supprimer le logo.");
+    }
   }
 
   return (
@@ -732,7 +802,7 @@ function LogoUploadSection({
               />
               {/* Bouton supprimer */}
               <button
-                onClick={handleRemove}
+                onClick={() => setConfirmRemoveOpen(true)}
                 title="Supprimer le logo"
                 className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow"
               >
@@ -790,9 +860,20 @@ function LogoUploadSection({
 
       {error   && <ErrorBox message={error} />}
       {success && (
-        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-          Logo mis à jour avec succès ✓
-        </p>
+        <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+          Logo mis à jour avec succès.
+        </div>
+      )}
+      {confirmRemoveOpen && (
+        <ConfirmRemoveAssetModal
+          title="Supprimer le logo ?"
+          description="Le logo sera retiré de votre page d'inscription et des cartes Wallet."
+          onCancel={() => setConfirmRemoveOpen(false)}
+          onConfirm={() => {
+            handleRemove();
+            setConfirmRemoveOpen(false);
+          }}
+        />
       )}
     </div>
   );
@@ -805,13 +886,14 @@ function CoverPhotoUploadSection({
   onUploaded,
 }: {
   currentCoverUrl: string | null;
-  onUploaded: (url: string) => void;
+  onUploaded: (url: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview]     = useState<string | null>(currentCoverUrl);
   const [uploading, setUploading] = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [success, setSuccess]     = useState(false);
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
 
   useEffect(() => { setPreview(currentCoverUrl); }, [currentCoverUrl]);
 
@@ -864,10 +946,17 @@ function CoverPhotoUploadSection({
     }
   }
 
-  function handleRemove() {
-    setPreview(null);
-    onUploaded("");
-    if (inputRef.current) inputRef.current.value = "";
+  async function handleRemove() {
+    setError(null);
+    setSuccess(false);
+    try {
+      await apiClient.patch("/business", { cover_photo_url: null });
+      setPreview(null);
+      onUploaded(null);
+      if (inputRef.current) inputRef.current.value = "";
+    } catch {
+      setError("Impossible de supprimer la photo.");
+    }
   }
 
   return (
@@ -883,7 +972,7 @@ function CoverPhotoUploadSection({
                 className="w-24 h-16 rounded-xl object-cover border border-gray-200 shadow-sm"
               />
               <button
-                onClick={handleRemove}
+                onClick={() => setConfirmRemoveOpen(true)}
                 title="Supprimer la photo"
                 className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow"
               >
@@ -936,15 +1025,77 @@ function CoverPhotoUploadSection({
 
       {error   && <ErrorBox message={error} />}
       {success && (
-        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-          Photo mise à jour avec succès ✓
-        </p>
+        <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+          Photo mise à jour avec succès.
+        </div>
+      )}
+      {confirmRemoveOpen && (
+        <ConfirmRemoveAssetModal
+          title="Supprimer la photo ?"
+          description="La photo sera retirée de vos aperçus et de vos cartes Wallet."
+          onCancel={() => setConfirmRemoveOpen(false)}
+          onConfirm={() => {
+            handleRemove();
+            setConfirmRemoveOpen(false);
+          }}
+        />
       )}
     </div>
   );
 }
 
 // ─── Modale sélection photo Google ───────────────────────────────────────────
+
+function ConfirmRemoveAssetModal({
+  title,
+  description,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded-full bg-red-50 p-2 text-red-600">
+            <Trash2 className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+            <p className="mt-1 text-sm leading-6 text-gray-500">{description}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex-1 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600"
+          >
+            Supprimer
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 function GmbPhotoModal({
   photos,
@@ -979,7 +1130,7 @@ function GmbPhotoModal({
           </svg>
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-gray-900">Photos de votre établissement</h3>
-            <p className="text-xs text-gray-400">Choisissez une photo à utiliser comme visuel de votre carte fidélité</p>
+            <p className="text-xs text-gray-400">Choisissez une photo à utiliser comme visuel de votre carte de fidélité.</p>
           </div>
         </div>
 
@@ -1075,11 +1226,11 @@ function QrRegistrationSection({
 
   return (
     <Section title="QR Code d'inscription" icon={QrCode}>
-      <div className="flex flex-col sm:flex-row items-center gap-8">
+      <div className="flex flex-col items-stretch gap-6 sm:flex-row sm:items-center sm:gap-8">
 
         {/* QR Code */}
-        <div className="shrink-0 p-4 border-2 border-dashed border-gray-200 rounded-2xl">
-          <QRCodeSVG value={registrationUrl} size={160} />
+        <div className="mx-auto shrink-0 rounded-2xl border-2 border-dashed border-gray-200 p-3 sm:p-4">
+          <QRCodeSVG value={registrationUrl} size={144} />
         </div>
 
         {/* Instructions + actions */}
@@ -1095,8 +1246,8 @@ function QrRegistrationSection({
           </div>
 
           {/* URL copiable */}
-          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-            <code className="text-xs text-gray-600 flex-1 truncate">{registrationUrl}</code>
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-gray-600 sm:text-xs">{registrationUrl}</code>
             <button
               onClick={copyLink}
               title="Copier le lien"
@@ -1107,10 +1258,10 @@ function QrRegistrationSection({
           </div>
 
           {/* Actions */}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button
               onClick={handlePrint}
-              className="py-2 px-4 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition-colors"
+              className="w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 sm:w-auto"
             >
               Imprimer le QR code
             </button>
@@ -1118,7 +1269,7 @@ function QrRegistrationSection({
               href={registrationUrl}
               target="_blank"
               rel="noreferrer"
-              className="py-2 px-4 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto"
             >
               Voir la page client →
             </a>

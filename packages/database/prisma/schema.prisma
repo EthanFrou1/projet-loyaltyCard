@@ -109,6 +109,11 @@ model Business {
   cover_photo_url    String? // URL R2 de la photo de l'établissement (strip Wallet)
   settings_json Json    @default("{}") // config libre (couleurs, textes wallet…)
   plan          Plan    @default(STARTER) // plan d'abonnement actif
+  stripe_customer_id     String?   @unique
+  stripe_subscription_id String?   @unique
+  stripe_price_id        String?
+  subscription_status    String?
+  current_period_end     DateTime?
   name_locked   Boolean @default(false)  // verrouillé après la 1ère sauvegarde du nom réel
 
   created_at DateTime @default(now())

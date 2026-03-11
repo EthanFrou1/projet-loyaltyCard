@@ -1,12 +1,8 @@
 "use client";
 
-/**
- * Page de bienvenue affichée après l'inscription du client.
- * Accessible sans authentification (le client arrive ici depuis /join).
- */
-
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { CheckCircle2, Gift, ShieldCheck, WalletCards } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -52,6 +48,11 @@ export default function WelcomePage() {
       .catch(() => {});
   }, []);
 
+  const previewStampCount = useMemo(() => {
+    if (!business) return 8;
+    return Math.min(Math.max(business.threshold, 5), 10);
+  }, [business]);
+
   async function handleGoogleWallet() {
     setGoogleLoading(true);
     try {
@@ -76,94 +77,133 @@ export default function WelcomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6 text-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center text-4xl animate-bounce">
-            Success
+    <div className="min-h-screen bg-[linear-gradient(180deg,#ecfdf5_0%,#f8fafc_38%,#ffffff_100%)] px-4 py-6 sm:py-10">
+      <div className="mx-auto w-full max-w-md space-y-5">
+        <section className="rounded-[30px] border border-white/80 bg-white/90 p-6 text-center shadow-[0_22px_60px_rgba(15,23,42,0.10)] backdrop-blur">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-inner">
+            <CheckCircle2 className="h-10 w-10" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {isNew ? "Votre carte est prête !" : "Bienvenue de retour !"}
+
+          <div className="mt-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600">
+              Carte créée
+            </p>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">
+              {isNew ? "Votre carte est prête" : "Bon retour"}
             </h1>
-            {business && (
-              <p className="text-sm text-gray-500 mt-1">
-                {isNew
-                  ? "Ajoutez-la à votre wallet pour l'avoir toujours avec vous."
-                  : `Votre carte ${business.name} est déjà active.`}
-              </p>
-            )}
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              {business
+                ? isNew
+                  ? `Ajoutez votre carte ${business.name} à votre Wallet pour l'avoir toujours avec vous.`
+                  : `Votre carte ${business.name} est déjà active. Vous pouvez la rouvrir à tout moment dans votre Wallet.`
+                : "Ajoutez votre carte à votre Wallet pour l'avoir toujours avec vous."}
+            </p>
           </div>
-        </div>
+
+          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+              <WalletCards className="mx-auto h-4 w-4 text-emerald-600" />
+              <p className="mt-2 text-[11px] font-medium text-slate-600">Toujours dispo</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+              <Gift className="mx-auto h-4 w-4 text-emerald-600" />
+              <p className="mt-2 text-[11px] font-medium text-slate-600">Récompense</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+              <ShieldCheck className="mx-auto h-4 w-4 text-emerald-600" />
+              <p className="mt-2 text-[11px] font-medium text-slate-600">Simple et sûr</p>
+            </div>
+          </div>
+        </section>
 
         {business && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-left space-y-3">
+          <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-3">
               {business.logo_url ? (
                 <img
                   src={business.logo_url}
                   alt={business.name}
-                  className="w-12 h-12 rounded-xl object-cover"
+                  className="h-14 w-14 rounded-2xl object-cover ring-1 ring-slate-200"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center text-xl">Shop</div>
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-lg font-semibold text-emerald-600">
+                  {business.name.charAt(0).toUpperCase()}
+                </div>
               )}
               <div>
-                <p className="font-semibold text-gray-900">{business.name}</p>
-                <p className="text-xs text-gray-500">Carte de fidélité</p>
+                <p className="text-lg font-semibold text-slate-900">{business.name}</p>
+                <p className="text-sm text-slate-500">Carte de fidélité active</p>
               </div>
             </div>
 
-            <div>
-              <div className="grid grid-cols-5 gap-2 mb-2">
-                {Array.from({ length: Math.min(business.threshold, 10) }).map((_, i) => (
+            <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-900">Votre objectif fidélité</p>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                  {business.threshold} tampons
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-5 gap-2">
+                {Array.from({ length: previewStampCount }).map((_, index) => (
                   <div
-                    key={i}
-                    className="aspect-square rounded-full border-2 border-gray-200 flex items-center justify-center text-xs text-gray-300"
+                    key={index}
+                    className="flex aspect-square items-center justify-center rounded-full border border-emerald-200 bg-white text-xs font-medium text-emerald-600"
                   >
-                    {i + 1}
+                    {index + 1}
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-500">
+
+              <p className="mt-4 text-sm text-slate-600">
                 Après <strong>{business.threshold} tampons</strong> : {business.reward_label}
               </p>
             </div>
-          </div>
+          </section>
         )}
 
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (!appleHealth?.ready) return;
-              window.location.href = `${API_URL}/api/v1/wallet/apple/${id}/download`;
-            }}
-            disabled={appleHealth?.ready === false}
-            className="flex items-center justify-center gap-3 w-full py-3.5 px-4 bg-black text-white font-semibold rounded-xl hover:bg-gray-900 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-          >
-            <AppleIcon />
-            {appleHealth?.ready === false ? "Apple Wallet indisponible" : "Ajouter à Apple Wallet"}
-          </button>
-          {appleHealth?.ready === false && (
-            <p className="text-xs text-amber-600 text-left px-1">
-              {appleHealth.issues[0] ?? "Configuration Apple Wallet incomplète."}
+        <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">Ajoutez-la à votre Wallet</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Choisissez l'application la plus pratique sur votre téléphone.
             </p>
-          )}
+          </div>
 
-          <button
-            onClick={handleGoogleWallet}
-            disabled={googleLoading}
-            className="flex items-center justify-center gap-3 w-full py-3.5 px-4 bg-white text-gray-800 font-semibold rounded-xl border-2 border-gray-200 hover:bg-gray-50 disabled:opacity-60 transition-colors"
-          >
-            <GoogleIcon />
-            {googleLoading ? "Ouverture..." : "Ajouter à Google Wallet"}
-          </button>
-        </div>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (!appleHealth?.ready) return;
+                window.location.href = `${API_URL}/api/v1/wallet/apple/${id}/download`;
+              }}
+              disabled={appleHealth?.ready === false}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-black px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <AppleIcon />
+              {appleHealth?.ready === false ? "Apple Wallet indisponible" : "Ajouter à Apple Wallet"}
+            </button>
 
-        <p className="text-xs text-gray-400 px-4">
-          Votre carte s'affiche dans votre application Wallet. Le commerçant scannera votre QR code à chaque visite pour ajouter un tampon.
-        </p>
+            {appleHealth?.ready === false && (
+              <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-700">
+                {appleHealth.issues[0] ?? "Configuration Apple Wallet incomplète."}
+              </p>
+            )}
+
+            <button
+              onClick={handleGoogleWallet}
+              disabled={googleLoading}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 disabled:opacity-60"
+            >
+              <GoogleIcon />
+              {googleLoading ? "Ouverture..." : "Ajouter à Google Wallet"}
+            </button>
+          </div>
+
+          <p className="mt-4 text-xs leading-6 text-slate-400">
+            Lors de chaque visite, le commerçant ajoutera vos tampons directement sur cette carte.
+          </p>
+        </section>
       </div>
     </div>
   );
@@ -187,7 +227,3 @@ function GoogleIcon() {
     </svg>
   );
 }
-
-
-
-

@@ -1,17 +1,9 @@
 "use client";
 
-/**
- * Page Abonnement — tarification visuelle.
- *
- * Affiche les 3 plans (Starter, Pro, Business) avec leurs fonctionnalités.
- * Le plan actuel est mis en évidence. Les boutons d'upgrade sont désactivés
- * (Stripe non encore intégré).
- */
-
-import { useEffect, useState } from "react";
-import { Check, Zap, Crown, Sparkles } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Check, Crown, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { apiClient, ApiClientError } from "@/lib/api-client";
 
 type PlanId = "STARTER" | "PRO" | "BUSINESS";
 
@@ -19,12 +11,23 @@ interface PlanConfig {
   id: PlanId;
   name: string;
   price: number;
-  icon: React.ElementType;
+  icon: LucideIcon;
   iconColor: string;
   borderColor: string;
   badgeColor: string;
+  description: string;
+  target: string;
   features: string[];
   highlighted: boolean;
+}
+
+interface BillingStatus {
+  stripe_ready: boolean;
+  current_plan: PlanId;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  has_customer: boolean;
+  has_subscription: boolean;
 }
 
 const plans: PlanConfig[] = [
@@ -33,15 +36,17 @@ const plans: PlanConfig[] = [
     name: "Starter",
     price: 19,
     icon: Zap,
-    iconColor: "text-gray-600",
-    borderColor: "border-gray-200",
-    badgeColor: "bg-gray-100 text-gray-700",
+    iconColor: "text-slate-500",
+    borderColor: "border-slate-200",
+    badgeColor: "bg-slate-100 text-slate-700",
+    description: "Pour lancer votre première carte de fidélité simplement.",
+    target: "Idéal pour un commerce qui démarre",
     highlighted: false,
     features: [
-      "1 programme fidélité actif",
+      "2 programmes fidélité actifs",
       "Clients illimités",
       "20 générations IA / mois",
-      "Apple Wallet",
+      "Apple Wallet + Google Wallet",
       "QR code d'inscription",
       "Dashboard analytics",
     ],
@@ -51,19 +56,20 @@ const plans: PlanConfig[] = [
     name: "Pro",
     price: 39,
     icon: Sparkles,
-    iconColor: "text-slate-700",
-    borderColor: "border-slate-500",
-    badgeColor: "bg-slate-900 text-white",
+    iconColor: "text-emerald-600",
+    borderColor: "border-emerald-300",
+    badgeColor: "bg-emerald-100 text-emerald-700",
+    description: "Le meilleur équilibre pour gérer plusieurs offres fidélité.",
+    target: "Idéal pour les établissements qui accélèrent",
     highlighted: true,
     features: [
-      "3 programmes fidélité actifs",
+      "5 programmes fidélité actifs",
       "Clients illimités",
       "100 générations IA / mois",
       "Apple Wallet + Google Wallet",
       "QR code d'inscription",
       "Dashboard analytics avancé",
       "Export CSV clients",
-      "Support prioritaire",
     ],
   },
   {
@@ -71,173 +77,334 @@ const plans: PlanConfig[] = [
     name: "Business",
     price: 69,
     icon: Crown,
-    iconColor: "text-emerald-600",
-    borderColor: "border-emerald-300",
-    badgeColor: "bg-emerald-100 text-emerald-700",
+    iconColor: "text-amber-500",
+    borderColor: "border-amber-200",
+    badgeColor: "bg-amber-100 text-amber-700",
+    description: "Pour piloter une activité plus dense avec plus de marge de manœuvre.",
+    target: "Idéal pour les structures les plus actives",
     highlighted: false,
     features: [
-      "Programmes fidélité illimités",
+      "Jusqu'à 5 programmes fidélité actifs",
       "Clients illimités",
       "300 générations IA / mois",
       "Apple Wallet + Google Wallet",
       "QR code d'inscription",
       "Dashboard analytics avancé",
       "Export CSV clients",
-      "Support prioritaire dédié",
       "Accès API (bientôt)",
       "Multi-établissements (bientôt)",
     ],
   },
 ];
 
+const fallbackPlan = plans[0]!;
+
 export default function BillingPage() {
-  const [currentPlan, setCurrentPlan] = useState<PlanId>("STARTER");
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<BillingStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pendingPlan, setPendingPlan] = useState<PlanId | "portal" | null>(null);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) return;
-
-    fetch(`${API_URL}/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.business?.plan) setCurrentPlan(data.business.plan as PlanId);
-      })
-      .catch(() => {});
+    void loadStatus();
   }, []);
 
+  useEffect(() => {
+    const stripeState = searchParams.get("stripe");
+    if (stripeState === "success") {
+      setMessage({ type: "success", text: "Le paiement Stripe a été validé. La mise à jour du plan arrive via webhook." });
+    }
+    if (stripeState === "cancel") {
+      setMessage({ type: "error", text: "Le paiement Stripe a été annulé." });
+    }
+  }, [searchParams]);
+
+  async function loadStatus() {
+    setLoading(true);
+    try {
+      const data = await apiClient.get<BillingStatus>("/stripe/status");
+      setStatus(data);
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Impossible de charger la facturation.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCheckout(plan: PlanId) {
+    setPendingPlan(plan);
+    setMessage(null);
+    try {
+      const data = await apiClient.post<{ url: string }>("/stripe/checkout", { plan });
+      window.location.href = data.url;
+    } catch (err) {
+      const text =
+        err instanceof ApiClientError
+          ? err.message
+          : "Impossible de démarrer le paiement Stripe.";
+      setMessage({ type: "error", text });
+      setPendingPlan(null);
+    }
+  }
+
+  async function handlePortal(targetPlan?: PlanId) {
+    setPendingPlan(targetPlan ?? "portal");
+    setMessage(null);
+    try {
+      const data = await apiClient.post<{ url: string }>("/stripe/portal", targetPlan ? { plan: targetPlan } : {});
+      window.location.href = data.url;
+    } catch (err) {
+      const text =
+        err instanceof ApiClientError
+          ? err.message
+          : "Impossible d'ouvrir le portail Stripe.";
+      setMessage({ type: "error", text });
+      setPendingPlan(null);
+    }
+  }
+
+  const currentPlan = status?.current_plan ?? "STARTER";
+  const currentPlanConfig = useMemo(
+    () => plans.find((plan) => plan.id === currentPlan) ?? fallbackPlan,
+    [currentPlan],
+  );
+  const visiblePlans = useMemo(
+    () => plans.filter((plan) => plan.id !== "BUSINESS"),
+    [],
+  );
+  const CurrentPlanIcon = currentPlanConfig.icon;
+
+  const billingNote = status?.current_period_end
+    ? `Période en cours jusqu'au ${new Date(status.current_period_end).toLocaleDateString("fr-FR")}.`
+    : status?.has_subscription || status?.subscription_status
+    ? `Abonnement Stripe ${status.subscription_status ?? "actif"} synchronisé.`
+    : "Aucun abonnement Stripe actif pour le moment.";
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <section className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/50 to-slate-50 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex w-fit items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+              Stripe
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Abonnement</h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                Gérez votre offre directement depuis Stripe en mode test depuis votre environnement local.
+              </p>
+            </div>
+          </div>
 
-      {/* En-tête */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Abonnement</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Choisissez le plan qui correspond à votre activité.
-        </p>
-      </div>
+          <div className="rounded-2xl border border-white/80 bg-white/90 p-4 shadow-sm lg:max-w-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Plan actif</p>
+            <div className="mt-2 flex items-center gap-3">
+              <div className={`rounded-2xl p-3 ${currentPlanConfig.badgeColor}`}>
+                <CurrentPlanIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-slate-900">{currentPlanConfig.name}</p>
+                <p className="text-sm text-slate-500">{status?.subscription_status ?? "Aucun abonnement Stripe"}</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-slate-500">{billingNote}</p>
+          </div>
+        </div>
+      </section>
 
-      {/* Cartes de tarification */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-        {plans.map((plan) => {
-          const Icon = plan.icon;
+      {message && (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            message.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
+
+      {!loading && status && !status.stripe_ready && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Stripe n'est pas encore configuré côté serveur. Il faudra ajouter les clés et les `price_id` dans `.env`.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        {visiblePlans.map((plan) => {
           const isCurrent = plan.id === currentPlan;
+          const Icon = plan.icon;
+          const canUseStripe = Boolean(status?.stripe_ready);
+          const hasSubscription = Boolean(status?.has_subscription);
+          const isUpgrade = plan.price > currentPlanConfig.price;
+
+          let ctaLabel = "Choisir cette offre";
+          let ctaAction = () => handleCheckout(plan.id);
+          let ctaDisabled = !canUseStripe || pendingPlan !== null;
+
+          if (isCurrent) {
+            ctaLabel = "Voir plan actuel";
+            ctaAction = async () => {};
+            ctaDisabled = true;
+          } else if (hasSubscription) {
+            ctaLabel =
+              pendingPlan === plan.id
+                ? "Ouverture..."
+                : isUpgrade
+                ? "Passer au plan supérieur"
+                : `Passer au plan ${plan.name}`;
+            ctaAction = () => handlePortal(plan.id);
+            ctaDisabled = !canUseStripe || pendingPlan !== null;
+          } else if (pendingPlan === plan.id) {
+            ctaLabel = "Redirection...";
+          }
 
           return (
-            <div
+            <article
               key={plan.id}
-              className={`relative bg-white rounded-2xl border-2 p-6 flex flex-col gap-5 transition-shadow ${
-                plan.highlighted
-                  ? `${plan.borderColor} shadow-lg`
-                  : `${plan.borderColor} shadow-sm`
-              }`}
+              className={`relative flex h-full flex-col rounded-3xl border bg-white p-6 shadow-sm transition-shadow ${
+                plan.highlighted ? "shadow-lg shadow-emerald-100/60" : ""
+              } ${plan.borderColor}`}
             >
-              {/* Badge "Populaire" pour Pro */}
-              {plan.highlighted && !isCurrent && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <span className="bg-slate-900 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    Le plus populaire
+              <div className="absolute right-5 top-5">
+                {isCurrent ? (
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${plan.badgeColor}`}>
+                    Plan actuel
                   </span>
-                </div>
-              )}
-
-              {/* Badge "Votre plan" si plan actuel */}
-              {isCurrent && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <span className={`text-xs font-semibold px-3 py-1 rounded-full ${plan.badgeColor}`}>
-                    Votre plan actuel
+                ) : plan.highlighted ? (
+                  <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+                    Recommandé
                   </span>
-                </div>
-              )}
+                ) : null}
+              </div>
 
-              {/* En-tête du plan */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Icon className={`h-5 w-5 ${plan.iconColor}`} />
-                  <h2 className="text-lg font-bold text-gray-900">{plan.name}</h2>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-2xl p-3 ${plan.badgeColor}`}>
+                    <Icon className={`h-5 w-5 ${plan.iconColor}`} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">{plan.name}</h2>
+                    <p className="text-sm text-slate-500">{plan.target}</p>
+                  </div>
                 </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold text-gray-900">{plan.price}€</span>
-                  <span className="text-sm text-gray-400">/mois</span>
+
+                <div>
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-extrabold tracking-tight text-slate-900">{plan.price}€</span>
+                    <span className="pb-1 text-sm text-slate-400">/mois</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{plan.description}</p>
                 </div>
               </div>
 
-              {/* Liste des fonctionnalités */}
-              <ul className="space-y-2.5 flex-1">
+              <ul className="mt-6 flex-1 space-y-3">
                 {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2.5 text-sm text-gray-600">
-                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
-                    {feature}
+                  <li key={feature} className="flex items-start gap-3 text-sm text-slate-600">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                    <span>{feature}</span>
                   </li>
                 ))}
               </ul>
 
-              {/* Bouton CTA */}
-              <div>
-                {isCurrent ? (
-                  <div className={`w-full py-2.5 px-4 rounded-xl text-sm font-semibold text-center ${plan.badgeColor}`}>
-                    Plan actuel
-                  </div>
-                ) : (
-                  <button
-                    disabled
-                    title="Stripe bientôt disponible"
-                    className="w-full py-2.5 px-4 rounded-xl text-sm font-semibold border-2 border-gray-200 text-gray-400 cursor-not-allowed"
-                  >
-                    Passer à {plan.name} — Bientôt disponible
-                  </button>
-                )}
+              <div className="mt-6 space-y-3">
+                <button
+                  type="button"
+                  onClick={ctaAction}
+                  disabled={ctaDisabled}
+                  className={`w-full rounded-2xl px-4 py-3 text-center text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isCurrent
+                      ? "border border-slate-200 bg-slate-100 text-slate-500"
+                      : "bg-emerald-500 text-white hover:bg-emerald-600"
+                  }`}
+                >
+                  {ctaLabel}
+                </button>
+
+                <p className="text-xs leading-5 text-slate-500">
+                  {hasSubscription
+                    ? "Les changements de plan et la facturation se gèrent dans Stripe."
+                    : "Le premier abonnement se lance via Stripe Checkout en mode test."}
+                </p>
               </div>
-            </div>
+            </article>
           );
         })}
       </div>
 
-      {/* Note sur Stripe */}
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-        <strong>Paiements bientôt disponibles.</strong> L'intégration Stripe est en cours de développement.
-        Votre plan actuel est gratuit pendant la période de beta. Vous serez notifié avant tout changement.
-      </div>
-
-      {/* Tableau comparatif */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-900">Comparatif détaillé</h3>
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
+        <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Comparatif détaillé</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              De quoi choisir le bon niveau avant de lancer le checkout.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Le plan <span className="font-semibold text-slate-900">Pro</span> reste le meilleur compromis pour
+            plusieurs programmes actifs.
+          </div>
         </div>
-        <div className="overflow-x-auto">
+
+        <div className="mt-4 sm:hidden">
+          <div className="overflow-hidden rounded-2xl border border-slate-100">
+            <div className="grid grid-cols-[1.4fr_repeat(2,minmax(0,0.9fr))] border-b border-slate-100 bg-slate-50 text-xs font-semibold">
+              <div className="px-2 py-3 text-slate-500">Fonction</div>
+              <div className="px-1 py-3 text-center text-slate-700">Starter</div>
+              <div className="px-1 py-3 text-center text-emerald-700">Pro</div>
+            </div>
+
+            {[
+              { label: "Programmes", starter: "2", pro: "5" },
+              { label: "IA / mois", starter: "20", pro: "100" },
+              { label: "Apple", starter: "Oui", pro: "Oui" },
+              { label: "Google", starter: "Oui", pro: "Oui" },
+              { label: "CSV", starter: "-", pro: "Oui" },
+            ].map((row) => (
+              <div
+                key={row.label}
+                className="grid grid-cols-[1.4fr_repeat(2,minmax(0,0.9fr))] border-b border-slate-100 text-xs leading-5 last:border-b-0"
+              >
+                <div className="px-2 py-3 font-medium text-slate-600">{row.label}</div>
+                <div className="px-1 py-3 text-center text-slate-600">{row.starter}</div>
+                <div className="px-1 py-3 text-center font-semibold text-emerald-700">{row.pro}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 hidden overflow-x-auto sm:block">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left px-6 py-3 text-gray-500 font-medium">Fonctionnalité</th>
-                <th className="text-center px-4 py-3 text-gray-700 font-semibold">Starter</th>
-                <th className="text-center px-4 py-3 text-slate-800 font-semibold">Pro</th>
-                <th className="text-center px-4 py-3 text-emerald-700 font-semibold">Business</th>
+              <tr className="border-b border-slate-100">
+                <th className="px-4 py-3 text-left font-medium text-slate-500">Fonctionnalité</th>
+                <th className="px-4 py-3 text-center font-semibold text-slate-700">Starter</th>
+                <th className="px-4 py-3 text-center font-semibold text-emerald-700">Pro</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-slate-100">
               {[
-                { label: "Programmes actifs",      starter: "1",    pro: "3",      business: "Illimité" },
-                { label: "Générations IA / mois",  starter: "20",   pro: "100",    business: "300"      },
-                { label: "Apple Wallet",            starter: "✓",    pro: "✓",      business: "✓"        },
-                { label: "Google Wallet",           starter: "—",    pro: "✓",      business: "✓"        },
-                { label: "Export CSV",             starter: "—",    pro: "✓",      business: "✓"        },
-                { label: "Support prioritaire",    starter: "—",    pro: "✓",      business: "✓ Dédié"  },
-                { label: "Accès API",              starter: "—",    pro: "—",      business: "Bientôt"  },
-                { label: "Multi-établissements",   starter: "—",    pro: "—",      business: "Bientôt"  },
+                { label: "Programmes actifs", starter: "2", pro: "5" },
+                { label: "Générations IA / mois", starter: "20", pro: "100" },
+                { label: "Apple Wallet", starter: "Oui", pro: "Oui" },
+                { label: "Google Wallet", starter: "Oui", pro: "Oui" },
+                { label: "Export CSV", starter: "-", pro: "Oui" },
               ].map((row) => (
-                <tr key={row.label} className="hover:bg-gray-50">
-                  <td className="px-6 py-3 text-gray-700">{row.label}</td>
-                  <td className="px-4 py-3 text-center text-gray-600">{row.starter}</td>
-                  <td className="px-4 py-3 text-center text-slate-700 font-medium">{row.pro}</td>
-                  <td className="px-4 py-3 text-center text-emerald-600 font-medium">{row.business}</td>
+                <tr key={row.label} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 text-slate-700">{row.label}</td>
+                  <td className="px-4 py-3 text-center text-slate-600">{row.starter}</td>
+                  <td className="px-4 py-3 text-center font-medium text-emerald-700">{row.pro}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
-
+      </section>
     </div>
   );
 }
+

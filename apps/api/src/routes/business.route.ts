@@ -77,7 +77,8 @@ async function buildUniqueBusinessSlug(name: string, businessId: string): Promis
 
 const UpdateBusinessBody = z.object({
   name: z.string().min(2).optional(),
-  logo_url: z.string().url().optional(),
+  logo_url: z.union([z.string().url(), z.null()]).optional(),
+  cover_photo_url: z.union([z.string().url(), z.null()]).optional(),
   settings_json: z.record(z.unknown()).optional(),
   // Force la régénération du slug depuis le nom actuel (utile si le slug est obsolète)
   regenerate_slug: z.boolean().optional(),
@@ -510,7 +511,7 @@ export async function businessRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "ValidationError", message: body.error.message });
     }
 
-    const PLAN_LIMITS: Record<string, number> = { STARTER: 1, PRO: 3, BUSINESS: Infinity };
+    const PLAN_LIMITS: Record<string, number> = { STARTER: 2, PRO: 5, BUSINESS: 5 };
 
     // Vérifier le plan et le nombre de programmes actifs
     const business = await prisma.business.findUnique({

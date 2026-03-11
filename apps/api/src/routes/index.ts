@@ -19,6 +19,7 @@ import { stampsRoutes }   from "./stamps.route.js";
 import { walletRoutes }   from "./wallet.route.js";
 import { aiRoutes }       from "./ai.route.js";
 import { publicRoutes }   from "./public.route.js";
+import { stripeRoutes }   from "./stripe.route.js";
 
 export async function registerRoutes(app: FastifyInstance) {
   // Préfixe /api/v1 pour permettre des migrations sans casser les clients
@@ -28,6 +29,7 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(stampsRoutes,   { prefix: "/api/v1/customers" });
   await app.register(walletRoutes,   { prefix: "/api/v1/wallet" });
   await app.register(aiRoutes,       { prefix: "/api/v1/ai" });
+  await app.register(stripeRoutes,   { prefix: "/api/v1/stripe" });
 
   // Routes publiques — accessibles sans authentification (inscription client)
   await app.register(publicRoutes, { prefix: "/api/v1/join" });

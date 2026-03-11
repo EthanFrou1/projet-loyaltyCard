@@ -25,7 +25,7 @@ export default function CustomersPage() {
   }, [searchParams]);
 
   const { data, isLoading, error, mutate } = useSWR<PaginatedResponse<CustomerResponse>>(
-    `/customers?search=${search}&page=${page}&per_page=20`,
+    `/customers?search=${search}&page=${page}&per_page=10`,
     (url: string) => apiClient.get<PaginatedResponse<CustomerResponse>>(url)
   );
   const setupBlocked = error instanceof ApiClientError && error.code === "BUSINESS_SETUP_REQUIRED";
@@ -68,7 +68,49 @@ export default function CustomersPage() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="divide-y divide-gray-100 sm:hidden">
+          {isLoading ? (
+            <div className="px-4 py-8 text-center text-sm text-gray-400">Chargement...</div>
+          ) : data?.data.length === 0 ? (
+            <div className="px-4 py-10 text-center">
+              <div className="mx-auto max-w-sm space-y-2">
+                <p className="text-sm font-medium text-gray-600">Aucun client trouve</p>
+                <p className="text-xs text-gray-400">
+                  Ajoutez votre premier client pour commencer a distribuer des tampons.
+                </p>
+              </div>
+            </div>
+          ) : (
+            data?.data.map((customer) => (
+              <button
+                key={customer.id}
+                type="button"
+                onClick={() => router.push(`/dashboard/customers/${customer.id}`)}
+                className="w-full space-y-3 px-4 py-4 text-left transition-colors hover:bg-gray-50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-gray-900">{customer.name}</p>
+                    <p className="mt-1 text-xs text-gray-500">{customer.phone ?? "-"}</p>
+                  </div>
+                  <div className="shrink-0">
+                    <StampBadge count={customer.stamp_count} threshold={customer.program_threshold ?? 10} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate font-medium text-emerald-700">
+                    {customer.program_name ?? "Aucun programme"}
+                  </span>
+                  <span className="shrink-0 text-gray-400">
+                    {new Date(customer.created_at).toLocaleDateString("fr-FR")}
+                  </span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto sm:block">
           <table className="min-w-[780px] w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -89,7 +131,12 @@ export default function CustomersPage() {
               ) : data?.data.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center">
-                    <p className="text-sm text-gray-400">Aucun client trouvé</p>
+                    <div className="mx-auto max-w-sm space-y-2">
+                      <p className="text-sm font-medium text-gray-600">Aucun client trouvé</p>
+                      <p className="text-xs text-gray-400">
+                        Ajoutez votre premier client pour commencer à distribuer des tampons.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -118,7 +165,7 @@ export default function CustomersPage() {
         </div>
 
         {data && data.total > data.per_page && (
-          <div className="px-6 py-4 border-t flex items-center justify-between">
+          <div className="flex flex-col gap-3 border-t px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <p className="text-sm text-gray-500">{data.total} clients au total</p>
             <div className="flex gap-2">
               <button
@@ -161,18 +208,21 @@ function CreateCustomerModal({
   onCreated: () => void;
 }) {
   const [mounted, setMounted] = useState(false);
+  const [firstName, setFirstName] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const trimmedFirstName = firstName.trim();
   const trimmedName = name.trim();
   const trimmedPhone = phone.trim();
   const trimmedEmail = email.trim();
   const phoneDigits = trimmedPhone.replace(/\D/g, "");
-  const isPhoneValid = trimmedPhone === "" || (phoneDigits.length >= 10 && phoneDigits.length <= 15);
-  const isEmailValid = trimmedEmail === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
-  const isFormValid = trimmedName.length >= 2 && isPhoneValid && isEmailValid;
+  const isPhoneValid = phoneDigits.length === 10;
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+  const fullName = `${trimmedFirstName} ${trimmedName}`.trim();
+  const isFormValid = trimmedFirstName.length >= 2 && trimmedName.length >= 2 && isPhoneValid && isEmailValid;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -181,9 +231,9 @@ function CreateCustomerModal({
     setError(null);
     try {
       await apiClient.post("/customers", {
-        name: trimmedName,
-        ...(trimmedPhone && { phone: trimmedPhone }),
-        ...(trimmedEmail && { email: trimmedEmail }),
+        name: fullName,
+        phone: trimmedPhone,
+        email: trimmedEmail,
       });
       onCreated();
     } catch (err) {
@@ -219,31 +269,47 @@ function CreateCustomerModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <Field label="Prénom" required>
+            <input
+              type="text"
+              required
+              placeholder="Marie"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className={inputClass}
+              autoFocus
+            />
+          </Field>
+
           <Field label="Nom" required>
             <input
               type="text"
               required
-              placeholder="Marie Dupont"
+              placeholder="Dupont"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={inputClass}
-              autoFocus
             />
           </Field>
 
           <Field label="Téléphone" optional>
             <input
               type="tel"
-              placeholder="06 12 34 56 78"
+              required
+              inputMode="numeric"
+              pattern="[0-9]{10}"
+              maxLength={10}
+              placeholder="0612345678"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
               className={inputClass}
             />
           </Field>
 
-          <Field label="Email" optional>
+          <Field label="Email" required>
             <input
               type="email"
+              required
               placeholder="marie@exemple.fr"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -284,12 +350,13 @@ function Field({ label, required, optional, children }: {
   optional?: boolean;
   children: React.ReactNode;
 }) {
+  const forceRequired = label.includes("Téléphone");
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">
         {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-        {optional && <span className="text-gray-400 font-normal ml-1">(optionnel)</span>}
+        {(required || forceRequired) && <span className="text-red-500 ml-0.5">*</span>}
+        {optional && !forceRequired && <span className="text-gray-400 font-normal ml-1">(optionnel)</span>}
       </label>
       {children}
     </div>

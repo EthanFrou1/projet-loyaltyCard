@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
  *   - Historique : versions archivées de ce programme
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
@@ -59,7 +60,7 @@ interface ProgramStats {
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const PLAN_LIMITS: Record<string, number> = { STARTER: 1, PRO: 3, BUSINESS: Infinity };
+const PLAN_LIMITS: Record<string, number> = { STARTER: 2, PRO: 5, BUSINESS: 5 };
 
 const PLAN_STYLES: Record<string, { label: string; className: string }> = {
   STARTER:  { label: "Starter",  className: "bg-gray-100 text-gray-600" },
@@ -72,7 +73,6 @@ const STAMP_THRESHOLD_OPTIONS = ["8", "10", "12", "14"];
 
 const inputClass =
   "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
@@ -100,16 +100,16 @@ function StatCard({
   colorClass: string;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className={`w-9 h-9 rounded-xl ${colorClass} flex items-center justify-center mb-4`}>
+    <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+      <div className={`mb-3 flex h-8 w-8 items-center justify-center rounded-xl sm:mb-4 sm:h-9 sm:w-9 ${colorClass}`}>
         <Icon className="h-4 w-4" />
       </div>
-      <div className="text-2xl font-bold text-gray-900 mb-1">
+      <div className="mb-1 text-[34px] font-bold leading-none text-gray-900 sm:text-2xl">
         {loading
-          ? <div className="h-8 w-16 bg-gray-200 rounded animate-pulse" />
+          ? <div className="h-7 w-14 rounded bg-gray-200 animate-pulse sm:h-8 sm:w-16" />
           : (value ?? "—")}
       </div>
-      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-sm leading-5 text-gray-500">{label}</p>
     </div>
   );
 }
@@ -138,6 +138,7 @@ export default function ProgramsPage() {
   const [editDirty, setEditDirty]         = useState(false);
   const [editSaving, setEditSaving]       = useState(false);
   const [editError, setEditError]         = useState<string | null>(null);
+  const [isThresholdMenuOpen, setIsThresholdMenuOpen] = useState(false);
 
   // ── Création ──
   const [showAddModal, setShowAddModal]  = useState(false);
@@ -157,6 +158,7 @@ export default function ProgramsPage() {
 
   const [showArchived, setShowArchived] = useState(false);
   const [qrExpanded, setQrExpanded] = useState(false);
+  const thresholdMenuRef = useRef<HTMLDivElement | null>(null);
   const editThresholdOptions = STAMP_THRESHOLD_OPTIONS.includes(editThreshold)
     ? STAMP_THRESHOLD_OPTIONS
     : [editThreshold, ...STAMP_THRESHOLD_OPTIONS];
@@ -164,6 +166,10 @@ export default function ProgramsPage() {
     newName.trim().length >= 2 &&
     STAMP_THRESHOLD_OPTIONS.includes(newThreshold) &&
     newReward.trim().length >= 2;
+  const isEditProgramValid =
+    editName.trim().length >= 2 &&
+    editThresholdOptions.includes(editThreshold) &&
+    editReward.trim().length >= 2;
   const isOwner = userRole === "OWNER" || userRole === "ADMIN";
 
   useEffect(() => {
@@ -171,6 +177,22 @@ export default function ProgramsPage() {
       setShowAddModal(true);
     }
   }, [searchParams, isOwner]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (!thresholdMenuRef.current) return;
+      if (!thresholdMenuRef.current.contains(event.target as Node)) {
+        setIsThresholdMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -286,6 +308,7 @@ export default function ProgramsPage() {
   function initEditFields(p: Program) {
     setEditName(p.name);
     setEditThreshold(String(p.config_json.threshold ?? 10));
+    setIsThresholdMenuOpen(false);
     setEditReward(p.config_json.reward_label ?? "");
     setEditBgColor(p.config_json.background_color ?? "#1a1a2e");
     setEditTextColor(p.config_json.text_color ?? "light");
@@ -507,7 +530,7 @@ export default function ProgramsPage() {
                 Annuler
               </button>
               <button onClick={addProgram} disabled={addingProg || !isNewProgramValid}
-                className="py-2 px-4 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
+                className="py-2 px-4 text-sm font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
                 {addingProg ? "Création…" : "Créer le programme"}
               </button>
             </div>
@@ -552,10 +575,14 @@ export default function ProgramsPage() {
 
       {/* ── Empty state ── */}
       {activePrograms.length === 0 && (
-        <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 p-16 text-center">
-          <Star className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm font-medium text-gray-500">Aucun programme actif</p>
-          <p className="text-xs text-gray-400 mt-1">Créez votre premier programme de fidélité.</p>
+        <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-10 text-center sm:p-16">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50">
+            <Star className="h-7 w-7 text-emerald-500" />
+          </div>
+          <p className="text-base font-semibold text-gray-700">Aucun programme actif</p>
+          <p className="mx-auto mt-2 max-w-sm text-sm text-gray-400">
+            Créez votre premier programme de fidélité pour commencer à enregistrer des clients et distribuer des tampons.
+          </p>
           {isOwner ? (
             <button
               onClick={() => setShowAddModal(true)}
@@ -572,7 +599,7 @@ export default function ProgramsPage() {
 
       {/* ── Interface principale ── */}
       {activePrograms.length > 0 && selectedProgram && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
 
           {/* ── Onglets programmes (uniquement si > 1 programme actif) ── */}
           {activePrograms.length > 1 && (
@@ -665,7 +692,7 @@ export default function ProgramsPage() {
             {/* ── Aperçu ── */}
             {subTab === "apercu" && (
               <div className="space-y-6">
-                <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
                   <StatCard
                     label="Clients inscrits"
                     value={currentStats?.clients}
@@ -768,20 +795,20 @@ export default function ProgramsPage() {
                 )}
 
                 {/* Règle visuelle */}
-                <div className="bg-gray-50 rounded-xl p-5">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                <div className="bg-gray-50 rounded-xl p-4 sm:p-5">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 sm:mb-4">
                     Règle de fidélité
                   </p>
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm sm:px-5">
                       <Stamp className="h-4 w-4 text-slate-600" />
                       <span className="font-bold text-gray-900 text-lg">
                         {selectedProgram.config_json.threshold ?? 10}
                       </span>
                       <span className="text-sm text-gray-500">tampons</span>
                     </div>
-                    <span className="text-gray-300 text-2xl font-light">→</span>
-                    <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm">
+                    <span className="hidden text-gray-300 text-2xl font-light sm:inline">→</span>
+                    <div className="flex items-center gap-2.5 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm sm:px-5">
                       <Star className="h-4 w-4 text-amber-500" />
                       <span className="font-semibold text-gray-900">
                         {selectedProgram.config_json.reward_label ?? "Récompense"}
@@ -943,7 +970,7 @@ export default function ProgramsPage() {
                         type="button"
                         onClick={saveDesign}
                         disabled={!designDirty || designSaving}
-                        className="py-2 px-4 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                        className="py-2 px-4 text-sm font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                       >
                         {designSaving ? "Enregistrement…" : "Enregistrer le design"}
                       </button>
@@ -981,16 +1008,57 @@ export default function ProgramsPage() {
                     </Field>
                     <Field label="Nombre de tampons pour une récompense">
                       <div className="flex items-center gap-3">
-                        <select
-                          required
-                          value={editThreshold}
-                          onChange={(e) => { setEditThreshold(e.target.value); setEditDirty(true); }}
-                          disabled={!isOwner}
-                          className={`${inputClass} w-24`}>
-                          {editThresholdOptions.map((value) => (
-                            <option key={value} value={value}>{value}</option>
-                          ))}
-                        </select>
+                        <div ref={thresholdMenuRef} className="relative w-24">
+                          <button
+                            type="button"
+                            onClick={() => isOwner && setIsThresholdMenuOpen((open) => !open)}
+                            disabled={!isOwner}
+                            aria-haspopup="listbox"
+                            aria-expanded={isThresholdMenuOpen}
+                            className={`${inputClass} flex items-center justify-between gap-2 text-left ${
+                              isThresholdMenuOpen ? "border-emerald-400 ring-2 ring-emerald-100" : ""
+                            }`}
+                          >
+                            <span>{editThreshold}</span>
+                            <ChevronDown
+                              className={`h-4 w-4 text-gray-400 transition-transform ${
+                                isThresholdMenuOpen ? "rotate-180 text-emerald-600" : ""
+                              }`}
+                            />
+                          </button>
+                          {isThresholdMenuOpen && (
+                            <div className="absolute left-0 top-[calc(100%+0.25rem)] z-20 w-40 overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-[0_14px_36px_rgba(15,23,42,0.16)]">
+                              <div className="p-1.5">
+                                {editThresholdOptions.map((value) => {
+                                  const isSelected = value === editThreshold;
+                                  return (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      role="option"
+                                      aria-selected={isSelected}
+                                      onClick={() => {
+                                        setEditThreshold(value);
+                                        setEditDirty(true);
+                                        setIsThresholdMenuOpen(false);
+                                      }}
+                                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                                        isSelected
+                                          ? "bg-emerald-500 text-white shadow-sm"
+                                          : "text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"
+                                      }`}
+                                    >
+                                      <span>{value}</span>
+                                      <span className={`text-xs ${isSelected ? "text-emerald-50" : "text-slate-400"}`}>
+                                        tampons
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <span className="text-sm text-gray-500">tampons</span>
                       </div>
                     </Field>
@@ -1010,8 +1078,8 @@ export default function ProgramsPage() {
                       <div className="flex items-center gap-3">
                         <button
                           type="submit"
-                          disabled={!editDirty}
-                          className="py-2 px-4 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                          disabled={!editDirty || !isEditProgramValid}
+                          className="py-2 px-4 text-sm font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                         >
                           Suivant →
                         </button>
@@ -1065,7 +1133,7 @@ export default function ProgramsPage() {
                         <button
                           onClick={confirmEdit}
                           disabled={editSaving}
-                          className="py-2 px-4 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                          className="py-2 px-4 text-sm font-medium bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors"
                         >
                           {editSaving ? "Enregistrement…" : "Confirmer la modification"}
                         </button>
@@ -1197,15 +1265,20 @@ export default function ProgramsPage() {
       )}
 
       {/* ── Info plan Starter ── */}
-      {plan === "STARTER" && activePrograms.length > 0 && (
+      {plan === "STARTER" && activePrograms.length > 1 && (
         <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-4">
           <Lock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-gray-700">Plan Starter — 1 programme actif</p>
+            <p className="text-sm font-medium text-gray-700">Plan Starter — 2 programmes actifs</p>
             <p className="text-xs text-gray-500 mt-0.5">
-              Passez au plan <strong>Pro</strong> (3 programmes) ou <strong>Business</strong> (illimité)
-              pour créer plusieurs programmes simultanés.
+              Passez au plan <strong>Pro</strong> (5 programmes) pour créer davantage de programmes simultanés.
             </p>
+            <Link
+              href="/dashboard/billing"
+              className="mt-3 inline-flex items-center rounded-lg bg-emerald-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600"
+            >
+              Passer au plan supérieur
+            </Link>
           </div>
         </div>
       )}
