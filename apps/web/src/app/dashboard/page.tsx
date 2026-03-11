@@ -15,8 +15,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { Users, Stamp, Gift, MapPin, Phone, Store, QrCode, X, Pencil } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api-client";
+import { StyledQRCode } from "@/components/styled-qr-code";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -253,7 +253,12 @@ export default function DashboardPage() {
                   title="Agrandir le QR code"
                   className="w-full flex flex-col items-center gap-3 p-5 border-2 border-dashed border-gray-200 rounded-2xl hover:border-slate-400 transition-colors group"
                 >
-                  <QRCodeSVG value={registrationUrl} size={160} className="w-full max-w-[200px]" />
+                  <StyledQRCode
+                    value={registrationUrl}
+                    size={160}
+                    establishmentType={settings.establishment_type}
+                    logoUrl={business?.logo_url}
+                  />
                   <p className="text-xs text-gray-400 group-hover:text-slate-600 transition-colors">
                     Cliquer pour agrandir
                   </p>
@@ -327,7 +332,12 @@ export default function DashboardPage() {
             </div>
 
             <div className="p-4 border-2 border-dashed border-gray-200 rounded-2xl">
-              <QRCodeSVG value={registrationUrl} size={220} />
+              <StyledQRCode
+                value={registrationUrl}
+                size={220}
+                establishmentType={settings.establishment_type}
+                logoUrl={business?.logo_url}
+              />
             </div>
 
             <div className="text-center space-y-1">

@@ -62,6 +62,7 @@ export default function CustomerDetailPage() {
   const [qrExpanded, setQrExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [redeemConfirmOpen, setRedeemConfirmOpen] = useState(false);
+  const [walletLoading, setWalletLoading] = useState<"APPLE" | "GOOGLE" | null>(null);
 
   useEffect(() => {
     fetch(`${API_URL}/api/v1/wallet/apple/health`)
@@ -112,6 +113,45 @@ export default function CustomerDetailPage() {
       setMessage({ text: "Pas de récompense disponible", ok: false });
     } finally {
       setLoading(null);
+    }
+  }
+
+  async function handleAppleWallet() {
+    setWalletLoading("APPLE");
+    setMessage(null);
+    try {
+      const response = await fetch(`${API_URL}/api/v1/wallet/apple/${id}/download`);
+      if (!response.ok) throw new Error("apple_wallet_download_failed");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "loyalty.pkpass";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      await mutate();
+    } catch {
+      setMessage({ text: "Impossible de générer la carte Apple Wallet.", ok: false });
+    } finally {
+      setWalletLoading(null);
+    }
+  }
+
+  async function handleGoogleWallet() {
+    setWalletLoading("GOOGLE");
+    setMessage(null);
+    try {
+      const data = await apiClient.post<{ save_url: string }>(`/wallet/google/${id}/jwt`, {});
+      await mutate();
+      window.open(data.save_url, "_blank", "noopener,noreferrer");
+    } catch {
+      setMessage({ text: "Impossible de préparer la carte Google Wallet.", ok: false });
+    } finally {
+      setWalletLoading(null);
     }
   }
 
@@ -317,12 +357,12 @@ export default function CustomerDetailPage() {
               </div>
             </div>
                         <button
-              onClick={() => {
-                window.location.href = `${API_URL}/api/v1/wallet/apple/${id}/download`;
-              }}
+              type="button"
+              onClick={() => void handleAppleWallet()}
+              disabled={walletLoading !== null}
               className="text-xs px-3 py-1.5 bg-black text-white rounded-lg hover:opacity-90 transition-opacity shrink-0"
             >
-              {hasApple ? "Mettre à jour" : "Ajouter"}
+              {walletLoading === "APPLE" ? "Préparation..." : hasApple ? "Mettre à jour" : "Ajouter"}
             </button>
           </div>
 
@@ -341,13 +381,12 @@ export default function CustomerDetailPage() {
               </div>
             </div>
             <button
-              onClick={async () => {
-                const data = await apiClient.post<{ save_url: string }>(`/wallet/google/${id}/jwt`, {});
-                window.open(data.save_url, "_blank");
-              }}
+              type="button"
+              onClick={() => void handleGoogleWallet()}
+              disabled={walletLoading !== null}
               className="text-xs px-3 py-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors shrink-0"
             >
-              {hasGoogle ? "Mettre à jour" : "Ajouter"}
+              {walletLoading === "GOOGLE" ? "Préparation..." : hasGoogle ? "Mettre à jour" : "Ajouter"}
             </button>
           </div>
 

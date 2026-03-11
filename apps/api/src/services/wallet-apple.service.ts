@@ -64,8 +64,8 @@ async function drawStampGridOnStrip(
   const circle = Math.max(26, Math.round(Math.min(width / 10.5, height / 2.9)));
   const stroke = Math.max(2, Math.round(circle * 0.08));
 
-  const row1Y = Math.round(height * 0.40);
-  const row2Y = secondRowCount > 0 ? Math.round(height * 0.60) : row1Y;
+  const row1Y = Math.round(height * 0.35);
+  const row2Y = secondRowCount > 0 ? Math.round(height * 0.65) : row1Y;
 
   const rowMargin = Math.round(width * 0.08);
   const span = Math.max(width - rowMargin * 2, 1);

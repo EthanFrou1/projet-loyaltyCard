@@ -21,8 +21,8 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle, Circle, Store, Star, Palette, MapPin, Phone, QrCode, Copy, Check, Upload, Trash2, Search, ArrowRight, Stamp, Lock, ChevronDown } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { apiClient } from "@/lib/api-client";
+import { StyledQRCode } from "@/components/styled-qr-code";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -569,6 +569,8 @@ export default function BusinessPage() {
       {business?.id && (
         <QrRegistrationSection
           slug={business.id}
+          establishmentType={business.settings_json?.establishment_type ?? null}
+          logoUrl={business.logo_url ?? null}
         />
       )}
 
@@ -1187,8 +1189,12 @@ function GmbPhotoModal({
 
 function QrRegistrationSection({
   slug,
+  establishmentType,
+  logoUrl,
 }: {
   slug: string;
+  establishmentType?: string | null;
+  logoUrl?: string | null;
 }) {
   const registrationUrl = `${APP_URL}/join/${slug}`;
   const [copied, setCopied] = useState(false);
@@ -1230,7 +1236,12 @@ function QrRegistrationSection({
 
         {/* QR Code */}
         <div className="mx-auto shrink-0 rounded-2xl border-2 border-dashed border-gray-200 p-3 sm:p-4">
-          <QRCodeSVG value={registrationUrl} size={144} />
+          <StyledQRCode
+            value={registrationUrl}
+            size={144}
+            establishmentType={establishmentType}
+            logoUrl={logoUrl}
+          />
         </div>
 
         {/* Instructions + actions */}

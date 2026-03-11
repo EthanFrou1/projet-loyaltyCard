@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Gift, ShieldCheck, Sparkles, StoreIcon, SearchX } from "lucide-react";
+import { Check, ChevronDown, Gift, ShieldCheck, Sparkles, StoreIcon, SearchX } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -45,6 +45,8 @@ export default function JoinPage() {
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [programMenuOpen, setProgramMenuOpen] = useState(false);
+  const programMenuRef = useRef<HTMLDivElement | null>(null);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const phoneDigits = phone.replace(/\D/g, "");
@@ -63,6 +65,17 @@ export default function JoinPage() {
     if (!hasPresetProgram || !selectedProgramId) return business.programs ?? [];
     return (business.programs ?? []).filter((program) => program.id === selectedProgramId);
   }, [business, hasPresetProgram, selectedProgramId]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!programMenuRef.current?.contains(event.target as Node)) {
+        setProgramMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
 
   useEffect(() => {
     const joinUrl = presetProgramId
@@ -242,20 +255,65 @@ export default function JoinPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!hasPresetProgram && (business.programs?.length ?? 0) > 1 && (
-              <div>
+              <div ref={programMenuRef} className="relative">
                 <label className="mb-1 block text-xs font-medium text-slate-700">Programme de fidélité *</label>
-                <select
-                  value={selectedProgramId ?? ""}
-                  onChange={(e) => setSelectedProgramId(e.target.value || null)}
-                  className={inputClass}
-                  required
+                <button
+                  type="button"
+                  onClick={() => setProgramMenuOpen((open) => !open)}
+                  className={`${inputClass} flex w-full items-center justify-between gap-3 text-left ${
+                    programMenuOpen ? "border-emerald-400 ring-2 ring-emerald-100" : ""
+                  }`}
+                  aria-haspopup="listbox"
+                  aria-expanded={programMenuOpen}
                 >
-                  {visiblePrograms.map((program) => (
-                    <option key={program.id} value={program.id}>
-                      {program.name} - {program.threshold} tampons = {program.reward_label}
-                    </option>
-                  ))}
-                </select>
+                  <span className="truncate">
+                    {selectedProgram
+                      ? `${selectedProgram.name} - ${selectedProgram.threshold} tampons = ${selectedProgram.reward_label}`
+                      : "Choisir un programme"}
+                  </span>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${
+                      programMenuOpen ? "rotate-180 text-emerald-600" : ""
+                    }`}
+                  />
+                </button>
+
+                {programMenuOpen && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.12)]">
+                    <div className="max-h-72 overflow-y-auto p-2">
+                      {visiblePrograms.map((program) => {
+                        const isSelected = selectedProgramId === program.id;
+                        return (
+                          <button
+                            key={program.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedProgramId(program.id);
+                              setProgramMenuOpen(false);
+                            }}
+                            className={`flex w-full items-start justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors ${
+                              isSelected
+                                ? "bg-emerald-500 text-white shadow-sm"
+                                : "text-slate-700 hover:bg-emerald-50"
+                            }`}
+                            role="option"
+                            aria-selected={isSelected}
+                          >
+                            <span className="min-w-0">
+                              <span className={`block truncate text-sm font-semibold ${isSelected ? "text-white" : "text-slate-900"}`}>
+                                {program.name}
+                              </span>
+                              <span className={`mt-0.5 block text-xs ${isSelected ? "text-emerald-50" : "text-slate-500"}`}>
+                                {program.threshold} tampons = {program.reward_label}
+                              </span>
+                            </span>
+                            {isSelected && <Check className="mt-0.5 h-4 w-4 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
